@@ -98,6 +98,29 @@ final class PipelineTest extends TestCase
         self::assertNotSame('', $response->getHeaderLine('Retry-After'));
     }
 
+    public function testOpenApiSpecIsServed(): void
+    {
+        $response = $this->handle('GET', '/api/v1/openapi.json');
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertStringContainsString('application/json', $response->getHeaderLine('Content-Type'));
+
+        $spec = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($spec);
+        self::assertArrayHasKey('openapi', $spec);
+        self::assertArrayHasKey('/api/v1/tokens', $spec['paths']);
+        self::assertArrayHasKey('bearerAuth', $spec['components']['securitySchemes']);
+    }
+
+    public function testSwaggerUiPageIsServed(): void
+    {
+        $response = $this->handle('GET', '/api/docs');
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertStringContainsString('text/html', $response->getHeaderLine('Content-Type'));
+        self::assertStringContainsString('swagger-ui', (string) $response->getBody());
+    }
+
     public function testHealthIsNotRateLimited(): void
     {
         // 헬스 프로브는 제외 대상 — 한도를 넘겨 호출해도 항상 200.

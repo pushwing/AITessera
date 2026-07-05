@@ -24,7 +24,7 @@ AITessera 는 **프레임워크 없는 순수 모던 PHP(8.4+)** 로 구성한 R
 | 캐시·큐 | Redis (`predis/predis`) |
 | 입력 검증 | `respect/validation` |
 | 환경변수 | `vlucas/phpdotenv` |
-| API 문서 | `zircote/swagger-php` (예정) |
+| API 문서 | `zircote/swagger-php` + Swagger UI (`/api/docs`) |
 | 정적 분석 | PHPStan level 8 |
 | 코드 스타일 | PHP-CS-Fixer (PSR-12) |
 | 테스트 | PHPUnit |
@@ -152,6 +152,8 @@ public/index.php
 | `POST` | `/api/v1/tokens/refresh` | — | Refresh 회전 재발급 (200) |
 | `DELETE` | `/api/v1/tokens` | — | 로그아웃 — Refresh 무효화 (204) |
 | `GET` | `/api/v1/me` | ✅ | 현재 로그인 사용자 조회 |
+| `GET` | `/api/docs` | — | Swagger UI (API 문서) |
+| `GET` | `/api/v1/openapi.json` | — | OpenAPI 스펙 (JSON) |
 
 보호 엔드포인트는 `Authorization: Bearer <access_token>` 헤더가 필요하다.
 
@@ -251,5 +253,5 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - [x] 인증 엔드포인트 (로그인·Refresh 회전·로그아웃)
 - [x] 회원가입 + 이메일 인증 발송
 - [x] RateLimit 미들웨어 (brute-force 방어)
-- [ ] Swagger UI (`/api/docs`)
+- [x] Swagger UI (`/api/docs`)
 - [ ] 로그 수집 파이프라인 (큐 컨슈머)
