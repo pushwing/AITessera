@@ -6,6 +6,7 @@ declare(strict_types=1);
 // AITessera CLI 진입점.
 // phinx 마이그레이션 위임 + 애플리케이션 커맨드(큐 컨슈머 등)를 지원한다.
 
+use App\Console\ProcessLogQueue;
 use App\Console\ProcessMailQueue;
 use App\Support\ContainerFactory;
 use Dotenv\Dotenv;
@@ -38,6 +39,7 @@ $usage = static function (): int {
       rollback    마지막 마이그레이션 롤백
       seed:run    시더 실행
       mail:work   메일 큐 컨슈머 (큐를 비우고 종료)
+      log:work    로그 큐 컨슈머 (큐를 비우고 종료)
 
     TXT);
 
@@ -53,11 +55,21 @@ $mailWork = static function (): int {
     return 0;
 };
 
+$logWork = static function (): int {
+    $worker = ContainerFactory::build()->get(ProcessLogQueue::class);
+    assert($worker instanceof ProcessLogQueue);
+    $count = $worker->run();
+    fwrite(STDOUT, "로그 {$count}건 처리 완료\n");
+
+    return 0;
+};
+
 $exitCode = match ($command) {
     'migrate'          => $runPhinx(['migrate']),
     'rollback'         => $runPhinx(['rollback']),
     'seed:run'         => $runPhinx(['seed:run']),
     'mail:work'        => $mailWork(),
+    'log:work'         => $logWork(),
     'list', '--help', '-h' => $usage(),
     default            => (static function (string $c): int {
         fwrite(STDERR, "알 수 없는 커맨드: {$c}\n실행 가능한 커맨드는 `php bin/console list` 로 확인하세요.\n");

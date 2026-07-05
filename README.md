@@ -154,6 +154,7 @@ public/index.php
 | `GET` | `/api/v1/me` | ✅ | 현재 로그인 사용자 조회 |
 | `GET` | `/api/docs` | — | Swagger UI (API 문서) |
 | `GET` | `/api/v1/openapi.json` | — | OpenAPI 스펙 (JSON) |
+| `POST` | `/api/v1/logs` | — | 클라이언트 로그 수집 (비동기, 202) |
 
 보호 엔드포인트는 `Authorization: Bearer <access_token>` 헤더가 필요하다.
 
@@ -254,4 +255,4 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - [x] 회원가입 + 이메일 인증 발송
 - [x] RateLimit 미들웨어 (brute-force 방어)
 - [x] Swagger UI (`/api/docs`)
-- [ ] 로그 수집 파이프라인 (큐 컨슈머)
+- [x] 로그 수집 파이프라인 (큐 컨슈머)

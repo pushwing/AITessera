@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controller\DocsController;
 use App\Controller\HealthController;
+use App\Controller\LogController;
 use App\Controller\MeController;
 use App\Controller\TokenController;
 use App\Controller\UserController;
@@ -32,6 +33,9 @@ return static function (RouteCollector $r): void {
     $r->addRoute('POST', '/api/v1/users', [UserController::class, 'register']);
     $r->addRoute('POST', '/api/v1/users/verify', [UserController::class, 'verify']);
     $r->addRoute('POST', '/api/v1/users/verify/resend', [UserController::class, 'resend']);
+
+    // 공개 — 클라이언트 로그 수집 (비동기 큐 적재)
+    $r->addRoute('POST', '/api/v1/logs', [LogController::class, 'store']);
 
     // 보호 — 현재 사용자 (JWT 필요)
     $r->addRoute('GET', '/api/v1/me', [MeController::class, 'show']);

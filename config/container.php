@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Middleware\RateLimitMiddleware;
 use App\Repository\EmailVerificationRepository;
 use App\Repository\EmailVerificationRepositoryInterface;
+use App\Repository\LogRepository;
+use App\Repository\LogRepositoryInterface;
 use App\Repository\RefreshTokenRepository;
 use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
@@ -14,6 +16,7 @@ use App\Support\ConnectionInterface;
 use App\Support\Database;
 use App\Support\Mail\LogMailer;
 use App\Support\Mail\MailerInterface;
+use App\Support\Queue\InMemoryQueue;
 use App\Support\Queue\QueueInterface;
 use App\Support\Queue\RedisQueue;
 use App\Support\SystemClock;
@@ -57,9 +60,12 @@ return [
     UserRepositoryInterface::class => autowire(UserRepository::class),
     RefreshTokenRepositoryInterface::class => autowire(RefreshTokenRepository::class),
     EmailVerificationRepositoryInterface::class => autowire(EmailVerificationRepository::class),
+    LogRepositoryInterface::class => autowire(LogRepository::class),
 
-    // 큐 — Redis 리스트 기반
-    QueueInterface::class => autowire(RedisQueue::class),
+    // 큐 — 테스트는 인메모리(무-Redis), 그 외 Redis 리스트
+    QueueInterface::class => factory(static function (Config $config, RedisClient $redis): QueueInterface {
+        return $config->appEnv === 'testing' ? new InMemoryQueue() : new RedisQueue($redis);
+    }),
 
     // 메일러 — 개발용 로그 구현 (운영은 symfony/mailer SMTP 로 교체)
     MailerInterface::class => autowire(LogMailer::class),
