@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Controller\DocsController;
 use App\Controller\HealthController;
 use App\Controller\MeController;
 use App\Controller\TokenController;
@@ -17,6 +18,10 @@ use FastRoute\RouteCollector;
 return static function (RouteCollector $r): void {
     // 공개 — 헬스체크
     $r->addRoute('GET', '/health', [HealthController::class, 'index']);
+
+    // 공개 — API 문서 (Swagger UI + OpenAPI 스펙)
+    $r->addRoute('GET', '/api/docs', [DocsController::class, 'ui']);
+    $r->addRoute('GET', '/api/v1/openapi.json', [DocsController::class, 'spec']);
 
     // 공개 — 인증 토큰
     $r->addRoute('POST', '/api/v1/tokens', [TokenController::class, 'issue']);
