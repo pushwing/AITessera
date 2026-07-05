@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controller\HealthController;
 use App\Controller\MeController;
+use App\Controller\TokenController;
 use FastRoute\RouteCollector;
 
 /**
@@ -15,6 +16,11 @@ use FastRoute\RouteCollector;
 return static function (RouteCollector $r): void {
     // 공개 — 헬스체크
     $r->addRoute('GET', '/health', [HealthController::class, 'index']);
+
+    // 공개 — 인증 토큰
+    $r->addRoute('POST', '/api/v1/tokens', [TokenController::class, 'issue']);
+    $r->addRoute('POST', '/api/v1/tokens/refresh', [TokenController::class, 'refresh']);
+    $r->addRoute('DELETE', '/api/v1/tokens', [TokenController::class, 'revoke']);
 
     // 보호 — 현재 사용자 (JWT 필요)
     $r->addRoute('GET', '/api/v1/me', [MeController::class, 'show']);

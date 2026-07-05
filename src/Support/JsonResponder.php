@@ -36,6 +36,14 @@ final readonly class JsonResponder
         return $this->json($payload, $statusCode);
     }
 
+    /**
+     * 본문 없는 성공 응답 (204 No Content).
+     */
+    public function noContent(): ResponseInterface
+    {
+        return $this->responseFactory->createResponse(204);
+    }
+
     public function error(string $code, string $message, int $statusCode): ResponseInterface
     {
         return $this->json([

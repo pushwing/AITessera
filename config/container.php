@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Repository\RefreshTokenRepository;
+use App\Repository\RefreshTokenRepositoryInterface;
+use App\Repository\UserRepository;
+use App\Repository\UserRepositoryInterface;
 use App\Support\Config;
+use App\Support\ConnectionInterface;
+use App\Support\Database;
 use App\Support\SystemClock;
 
 use function DI\autowire;
@@ -32,26 +38,17 @@ return [
     // 시계 (PSR-20)
     ClockInterface::class => autowire(SystemClock::class),
 
+    // DB 연결 — 지연 연결 래퍼
+    ConnectionInterface::class => autowire(Database::class),
+
+    // Repository — 인터페이스 → PDO 구현 바인딩
+    UserRepositoryInterface::class => autowire(UserRepository::class),
+    RefreshTokenRepositoryInterface::class => autowire(RefreshTokenRepository::class),
+
     // PSR-17 팩토리 — 하나의 nyholm 인스턴스를 여러 인터페이스에 바인딩
     Psr17Factory::class => autowire(),
     ResponseFactoryInterface::class => get(Psr17Factory::class),
     StreamFactoryInterface::class => get(Psr17Factory::class),
-
-    // PDO — 지연 연결 (첫 사용 시점에 생성)
-    PDO::class => factory(static function (Config $config): PDO {
-        $dsn = sprintf(
-            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
-            $config->dbHost,
-            $config->dbPort,
-            $config->dbName,
-        );
-
-        return new PDO($dsn, $config->dbUser, $config->dbPass, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]);
-    }),
 
     // Redis (predis) — 캐시·큐 공용
     RedisClient::class => factory(static function (Config $config): RedisClient {
