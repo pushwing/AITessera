@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+# 같은 ref 에 새 푸시가 오면 진행 중 실행을 취소
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (PHP 8.4 · CS · PHPStan · PHPUnit)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: aitessera
+          MYSQL_USER: aitessera
+          MYSQL_PASSWORD: aitessera
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, pdo_mysql, redis, curl, dom, xml, tokenizer
+          coverage: pcov
+          tools: composer:v2
+
+      - name: Composer 캐시 디렉토리 확인
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Composer 패키지 캐시
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: 의존성 설치
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: .env 준비 (CI용 DB·Redis·JWT 주입)
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's|^APP_ENV=.*|APP_ENV=testing|' \
+            -e 's|^DB_HOST=.*|DB_HOST=127.0.0.1|' \
+            -e 's|^DB_PORT=.*|DB_PORT=3306|' \
+            -e 's|^DB_NAME=.*|DB_NAME=aitessera|' \
+            -e 's|^DB_USER=.*|DB_USER=aitessera|' \
+            -e 's|^DB_PASS=.*|DB_PASS=aitessera|' \
+            -e 's|^REDIS_HOST=.*|REDIS_HOST=127.0.0.1|' \
+            -e 's|^REDIS_PORT=.*|REDIS_PORT=6379|' \
+            -e 's|^JWT_SECRET=.*|JWT_SECRET=ci_test_secret_at_least_32_characters_long|' \
+            .env
+
+      - name: 런타임 디렉토리 생성 (git 미추적, 경로 보장)
+        run: mkdir -p var/cache var/logs/raw var/logs/queue-failed
+
+      - name: PHP-CS-Fixer (dry-run)
+        run: composer cs-check
+
+      - name: PHPStan (level 8)
+        run: composer analyse
+
+      - name: 마이그레이션 (테스트 스키마 구성)
+        run: php bin/console migrate
+
+      - name: PHPUnit (단위·DB 통합)
+        run: composer test
