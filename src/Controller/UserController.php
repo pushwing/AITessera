@@ -30,6 +30,23 @@ final class UserController extends BaseController
         path: '/api/v1/users',
         summary: '회원가입',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['email', 'password', 'affiliation', 'name', 'contact', 'terms_agreed', 'third_party_agreed'],
+                properties: [
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'user@aivance.test'),
+                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'password1234!', description: '10자 이상, 영문·숫자·특수문자 각 1개 이상'),
+                    new OA\Property(property: 'affiliation', type: 'string', enum: ['aicura', 'aicopia', 'aicreo', 'aivance', 'ailicet'], example: 'aivance'),
+                    new OA\Property(property: 'name', type: 'string', example: '홍길동'),
+                    new OA\Property(property: 'contact', type: 'string', example: '010-1234-5678'),
+                    new OA\Property(property: 'company', type: 'string', nullable: true, example: 'AIvance'),
+                    new OA\Property(property: 'terms_agreed', type: 'boolean', example: true),
+                    new OA\Property(property: 'third_party_agreed', type: 'boolean', example: true),
+                    new OA\Property(property: 'profile', type: 'object', description: '소속별 부가 항목 (docs/profile-fields.md 참고)', additionalProperties: true),
+                ],
+            ),
+        ),
         tags: ['Users'],
         responses: [
             new OA\Response(response: 201, description: '가입 완료(이메일 인증 대기)'),
@@ -53,6 +70,15 @@ final class UserController extends BaseController
         path: '/api/v1/users/verify',
         summary: '이메일 인증',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['token'],
+                properties: [
+                    new OA\Property(property: 'token', type: 'string', description: '가입 시 발송된 인증 토큰'),
+                ],
+            ),
+        ),
         tags: ['Users'],
         responses: [
             new OA\Response(response: 200, description: '인증 완료'),
@@ -71,6 +97,15 @@ final class UserController extends BaseController
         path: '/api/v1/users/verify/resend',
         summary: '인증 메일 재발송',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['email'],
+                properties: [
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'user@aivance.test'),
+                ],
+            ),
+        ),
         tags: ['Users'],
         responses: [new OA\Response(response: 202, description: '재발송 요청 접수')],
     )]
