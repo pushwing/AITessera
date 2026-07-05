@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain;
 
+use App\Support\Dates;
 use DateTimeImmutable;
 
 /**
@@ -32,17 +33,12 @@ final readonly class User
             passwordHash: (string) $row['password_hash'],
             affiliation: Affiliation::from((string) $row['affiliation']),
             isActive: (bool) $row['is_active'],
-            emailVerifiedAt: self::toDateTime($row['email_verified_at'] ?? null),
+            emailVerifiedAt: Dates::nullable($row['email_verified_at'] ?? null),
         );
     }
 
     public function isEmailVerified(): bool
     {
         return $this->emailVerifiedAt !== null;
-    }
-
-    private static function toDateTime(mixed $value): ?DateTimeImmutable
-    {
-        return is_string($value) && $value !== '' ? new DateTimeImmutable($value) : null;
     }
 }

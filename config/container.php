@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Repository\EmailVerificationRepository;
+use App\Repository\EmailVerificationRepositoryInterface;
 use App\Repository\RefreshTokenRepository;
 use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
@@ -9,6 +11,10 @@ use App\Repository\UserRepositoryInterface;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
 use App\Support\Database;
+use App\Support\Mail\LogMailer;
+use App\Support\Mail\MailerInterface;
+use App\Support\Queue\QueueInterface;
+use App\Support\Queue\RedisQueue;
 use App\Support\SystemClock;
 
 use function DI\autowire;
@@ -44,6 +50,13 @@ return [
     // Repository — 인터페이스 → PDO 구현 바인딩
     UserRepositoryInterface::class => autowire(UserRepository::class),
     RefreshTokenRepositoryInterface::class => autowire(RefreshTokenRepository::class),
+    EmailVerificationRepositoryInterface::class => autowire(EmailVerificationRepository::class),
+
+    // 큐 — Redis 리스트 기반
+    QueueInterface::class => autowire(RedisQueue::class),
+
+    // 메일러 — 개발용 로그 구현 (운영은 symfony/mailer SMTP 로 교체)
+    MailerInterface::class => autowire(LogMailer::class),
 
     // PSR-17 팩토리 — 하나의 nyholm 인스턴스를 여러 인터페이스에 바인딩
     Psr17Factory::class => autowire(),

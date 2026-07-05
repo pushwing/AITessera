@@ -65,6 +65,24 @@ final class PipelineTest extends TestCase
         self::assertSame('UNAUTHORIZED', $this->decode($response)['code']);
     }
 
+    public function testRegisterRouteIsPublic(): void
+    {
+        // POST /api/v1/users 는 공개 → 인증을 거치지 않고 검증 단계까지 도달(빈 본문 → 422).
+        $response = $this->handle('POST', '/api/v1/users');
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame('VALIDATION_ERROR', $this->decode($response)['code']);
+    }
+
+    public function testUsersListRouteIsProtected(): void
+    {
+        // GET /api/v1/users 는 공개 목록이 아니므로(메서드 정확 매칭) 토큰 없이는 401.
+        $response = $this->handle('GET', '/api/v1/users');
+
+        self::assertSame(401, $response->getStatusCode());
+        self::assertSame('UNAUTHORIZED', $this->decode($response)['code']);
+    }
+
     public function testProtectedRouteWithMalformedTokenReturns401(): void
     {
         $response = $this->handle('GET', '/api/v1/me', ['Authorization' => 'Bearer not-a-jwt']);

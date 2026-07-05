@@ -38,6 +38,8 @@ final class JwtIssuerTest extends TestCase
             jwtAlgo: 'HS256',
             jwtAccessTtl: 900,
             jwtRefreshTtl: 1209600,
+            emailVerifyTtl: 86400,
+            appBaseUrl: 'http://localhost:9300/',
         );
         $jwtConfig = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
         $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);

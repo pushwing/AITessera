@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use PDO;
+use Throwable;
 
 /**
  * PDO 지연 연결 래퍼.
@@ -23,6 +24,22 @@ final class Database implements ConnectionInterface
     public function pdo(): PDO
     {
         return $this->pdo ??= $this->connect();
+    }
+
+    public function transaction(callable $work): mixed
+    {
+        $pdo = $this->pdo();
+        $pdo->beginTransaction();
+        try {
+            $result = $work();
+            $pdo->commit();
+
+            return $result;
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+
+            throw $e;
+        }
     }
 
     private function connect(): PDO
