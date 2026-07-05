@@ -45,6 +45,7 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
         ['POST', '/api/v1/users'],
         ['POST', '/api/v1/users/verify'],
         ['POST', '/api/v1/users/verify/resend'],
+        ['POST', '/api/v1/logs'],
         ['GET', '/api/docs'],
         ['GET', '/api/v1/openapi.json'],
     ];

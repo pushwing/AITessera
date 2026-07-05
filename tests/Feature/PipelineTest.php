@@ -121,6 +121,23 @@ final class PipelineTest extends TestCase
         self::assertStringContainsString('swagger-ui', (string) $response->getBody());
     }
 
+    public function testLogIngestionAcceptsAndReturns202(): void
+    {
+        // 테스트 환경은 InMemoryQueue → Redis 없이 큐 적재 후 202.
+        $response = $this->handle('POST', '/api/v1/logs', [], ['level' => 'info', 'message' => 'hello']);
+
+        self::assertSame(202, $response->getStatusCode());
+        self::assertSame('success', $this->decode($response)['status']);
+    }
+
+    public function testLogIngestionRejectsInvalidLevel(): void
+    {
+        $response = $this->handle('POST', '/api/v1/logs', [], ['level' => 'bogus', 'message' => 'x']);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame('VALIDATION_ERROR', $this->decode($response)['code']);
+    }
+
     public function testHealthIsNotRateLimited(): void
     {
         // 헬스 프로브는 제외 대상 — 한도를 넘겨 호출해도 항상 200.
@@ -160,14 +177,20 @@ final class PipelineTest extends TestCase
     }
 
     /**
-     * @param array<string, string> $headers
+     * @param array<string, string>     $headers
+     * @param array<string, mixed>|null $json
      */
-    private function handle(string $method, string $path, array $headers = []): ResponseInterface
+    private function handle(string $method, string $path, array $headers = [], ?array $json = null): ResponseInterface
     {
         $psr17 = new Psr17Factory();
         $request = $psr17->createServerRequest($method, $path);
         foreach ($headers as $name => $value) {
             $request = $request->withHeader($name, $value);
+        }
+        if ($json !== null) {
+            $request = $request
+                ->withHeader('Content-Type', 'application/json')
+                ->withBody($psr17->createStream(json_encode($json, JSON_THROW_ON_ERROR)));
         }
 
         return AppFactory::pipeline($this->container)->handle($request);
