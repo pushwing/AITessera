@@ -97,7 +97,7 @@ php bin/console <command>   # CLI (migrate·rollback·seed:run)
 public/index.php
   → .env 로딩 → DI 컨테이너 빌드
   → PSR-15 미들웨어 파이프라인 (Relay)
-      [ ErrorHandler → Cors → JwtAuth → RouteDispatch ]
+      [ ErrorHandler → Cors → RateLimit → JwtAuth → RouteDispatch ]
   → Controller → Service → Repository(PDO)
   → PSR-7 Response
 ```
@@ -249,7 +249,7 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - [x] CI 워크플로우 (GitHub Actions)
 - [x] DI 컨테이너 + PSR-15 미들웨어 파이프라인
 - [x] 인증 엔드포인트 (로그인·Refresh 회전·로그아웃)
-- [ ] 회원가입 + 이메일 인증 발송
-- [ ] RateLimit 미들웨어 (brute-force 방어)
+- [x] 회원가입 + 이메일 인증 발송
+- [x] RateLimit 미들웨어 (brute-force 방어)
 - [ ] Swagger UI (`/api/docs`)
 - [ ] 로그 수집 파이프라인 (큐 컨슈머)

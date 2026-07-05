@@ -29,6 +29,8 @@ final readonly class Config
         public int $jwtRefreshTtl,
         public int $emailVerifyTtl,
         public string $appBaseUrl,
+        public int $rateLimitAuth = 10,
+        public int $rateLimitApi = 120,
     ) {
     }
 
@@ -58,6 +60,8 @@ final readonly class Config
             jwtRefreshTtl: self::int('JWT_REFRESH_TTL', 1209600),
             emailVerifyTtl: self::int('EMAIL_VERIFY_TTL', 86400),
             appBaseUrl: self::str('APP_BASE_URL', 'http://localhost:9300/'),
+            rateLimitAuth: self::int('RATE_LIMIT_AUTH', 10),
+            rateLimitApi: self::int('RATE_LIMIT_API', 120),
         );
     }
 
