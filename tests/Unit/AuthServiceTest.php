@@ -19,7 +19,6 @@ use DateTimeImmutable;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
-use PDO;
 use PHPUnit\Framework\TestCase;
 use Tests\Support\FixedClock;
 
@@ -49,6 +48,8 @@ final class AuthServiceTest extends TestCase
             jwtAlgo: 'HS256',
             jwtAccessTtl: 900,
             jwtRefreshTtl: 1209600,
+            emailVerifyTtl: 86400,
+            appBaseUrl: 'http://localhost:9300/',
         );
         $jwtConfig = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
         $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);
@@ -119,11 +120,7 @@ final class AuthServiceTest extends TestCase
         $users = $this->createMock(UserRepositoryInterface::class);
         $users->method('findById')->willReturn($this->userRow());
 
-        $pdo = $this->createMock(PDO::class);
-        $pdo->expects(self::once())->method('beginTransaction');
-        $pdo->expects(self::once())->method('commit');
-
-        $pair = $this->service($users, $tokens, $pdo)->refresh($plain);
+        $pair = $this->service($users, $tokens)->refresh($plain);
 
         self::assertNotSame('', $pair->accessToken);
         self::assertNotSame('', $pair->refreshToken);
@@ -199,10 +196,9 @@ final class AuthServiceTest extends TestCase
     private function service(
         UserRepositoryInterface $users,
         RefreshTokenRepositoryInterface $tokens,
-        ?PDO $pdo = null,
     ): AuthService {
         $db = $this->createMock(ConnectionInterface::class);
-        $db->method('pdo')->willReturn($pdo ?? $this->createMock(PDO::class));
+        $db->method('transaction')->willReturnCallback(static fn (callable $work): mixed => $work());
 
         return new AuthService($users, $tokens, $this->issuer, $this->clock, $db);
     }

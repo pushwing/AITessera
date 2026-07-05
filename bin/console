@@ -4,9 +4,15 @@
 declare(strict_types=1);
 
 // AITessera CLI 진입점.
-// 현재는 phinx 마이그레이션 위임만 지원한다. 큐 컨슈머·시더(seed:admin) 등은 이후 작업에서 확장한다.
+// phinx 마이그레이션 위임 + 애플리케이션 커맨드(큐 컨슈머 등)를 지원한다.
+
+use App\Console\ProcessMailQueue;
+use App\Support\ContainerFactory;
+use Dotenv\Dotenv;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+
+Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
 
 $command = $argv[1] ?? 'list';
 
@@ -31,8 +37,18 @@ $usage = static function (): int {
       migrate     대기 중인 마이그레이션 실행
       rollback    마지막 마이그레이션 롤백
       seed:run    시더 실행
+      mail:work   메일 큐 컨슈머 (큐를 비우고 종료)
 
     TXT);
+
+    return 0;
+};
+
+$mailWork = static function (): int {
+    $worker = ContainerFactory::build()->get(ProcessMailQueue::class);
+    assert($worker instanceof ProcessMailQueue);
+    $count = $worker->run();
+    fwrite(STDOUT, "메일 {$count}건 처리 완료\n");
 
     return 0;
 };
@@ -41,6 +57,7 @@ $exitCode = match ($command) {
     'migrate'          => $runPhinx(['migrate']),
     'rollback'         => $runPhinx(['rollback']),
     'seed:run'         => $runPhinx(['seed:run']),
+    'mail:work'        => $mailWork(),
     'list', '--help', '-h' => $usage(),
     default            => (static function (string $c): int {
         fwrite(STDERR, "알 수 없는 커맨드: {$c}\n실행 가능한 커맨드는 `php bin/console list` 로 확인하세요.\n");

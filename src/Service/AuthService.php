@@ -17,7 +17,6 @@ use App\Repository\UserRepositoryInterface;
 use App\Support\ConnectionInterface;
 use App\Support\JwtIssuer;
 use Psr\Clock\ClockInterface;
-use Throwable;
 
 /**
  * 인증 유스케이스 — 로그인(토큰 발급)·Refresh 회전·로그아웃(무효화).
@@ -86,19 +85,11 @@ final readonly class AuthService
         $user = User::fromRow($userRow);
 
         // 회전: 이전 토큰 폐기 + 새 토큰 발급을 하나의 트랜잭션으로
-        $pdo = $this->db->pdo();
-        $pdo->beginTransaction();
-        try {
+        return $this->db->transaction(function () use ($token, $user, $now): TokenPair {
             $this->refreshTokens->revoke($token->id, $now);
-            $pair = $this->issuePair($user->id, $user->affiliation->value);
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
 
-            throw $e;
-        }
-
-        return $pair;
+            return $this->issuePair($user->id, $user->affiliation->value);
+        });
     }
 
     public function logout(string $refreshToken): void

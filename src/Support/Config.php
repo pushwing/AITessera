@@ -27,6 +27,8 @@ final readonly class Config
         public string $jwtAlgo,
         public int $jwtAccessTtl,
         public int $jwtRefreshTtl,
+        public int $emailVerifyTtl,
+        public string $appBaseUrl,
     ) {
     }
 
@@ -54,6 +56,8 @@ final readonly class Config
             jwtAlgo: self::str('JWT_ALGO', 'HS256'),
             jwtAccessTtl: self::int('JWT_ACCESS_TTL', 900),
             jwtRefreshTtl: self::int('JWT_REFRESH_TTL', 1209600),
+            emailVerifyTtl: self::int('EMAIL_VERIFY_TTL', 86400),
+            appBaseUrl: self::str('APP_BASE_URL', 'http://localhost:9300/'),
         );
     }
 

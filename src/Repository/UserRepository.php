@@ -45,6 +45,58 @@ final readonly class UserRepository implements UserRepositoryInterface
         return $row === false ? null : $row;
     }
 
+    public function emailExists(string $email): bool
+    {
+        $stmt = $this->db->pdo()->prepare('SELECT 1 FROM users WHERE email = :email LIMIT 1');
+        $stmt->execute(['email' => $email]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
+    public function create(
+        string $email,
+        string $passwordHash,
+        string $affiliation,
+        string $name,
+        string $contact,
+        ?string $company,
+        array $profile,
+        DateTimeImmutable $agreedAt,
+    ): int {
+        $stmt = $this->db->pdo()->prepare(
+            'INSERT INTO users
+                (email, password_hash, affiliation, name, contact, company, profile,
+                 terms_agreed_at, third_party_agreed_at, created_at)
+             VALUES
+                (:email, :password_hash, :affiliation, :name, :contact, :company, :profile,
+                 :agreed_at, :agreed_at, :created_at)',
+        );
+        $stmt->execute([
+            'email' => $email,
+            'password_hash' => $passwordHash,
+            'affiliation' => $affiliation,
+            'name' => $name,
+            'contact' => $contact,
+            'company' => $company,
+            'profile' => $profile === [] ? null : json_encode($profile, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            'agreed_at' => $agreedAt->format('Y-m-d H:i:s'),
+            'created_at' => $agreedAt->format('Y-m-d H:i:s'),
+        ]);
+
+        return (int) $this->db->pdo()->lastInsertId();
+    }
+
+    public function markEmailVerified(int $id, DateTimeImmutable $at): void
+    {
+        $stmt = $this->db->pdo()->prepare(
+            'UPDATE users SET email_verified_at = :at, updated_at = :at WHERE id = :id',
+        );
+        $stmt->execute([
+            'at' => $at->format('Y-m-d H:i:s'),
+            'id' => $id,
+        ]);
+    }
+
     public function updateLastLogin(int $id, DateTimeImmutable $at): void
     {
         $stmt = $this->db->pdo()->prepare(

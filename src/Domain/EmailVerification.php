@@ -8,15 +8,15 @@ use App\Support\Dates;
 use DateTimeImmutable;
 
 /**
- * Refresh 토큰 도메인 모델 — DB 행을 타입 안전하게 매핑한다.
+ * 이메일 인증 토큰 도메인 모델 — DB 행을 타입 안전하게 매핑한다.
  */
-final readonly class RefreshToken
+final readonly class EmailVerification
 {
     public function __construct(
         public int $id,
         public int $userId,
         public DateTimeImmutable $expiresAt,
-        public ?DateTimeImmutable $revokedAt,
+        public ?DateTimeImmutable $consumedAt,
     ) {
     }
 
@@ -29,13 +29,13 @@ final readonly class RefreshToken
             id: (int) $row['id'],
             userId: (int) $row['user_id'],
             expiresAt: new DateTimeImmutable((string) $row['expires_at']),
-            revokedAt: Dates::nullable($row['revoked_at'] ?? null),
+            consumedAt: Dates::nullable($row['consumed_at'] ?? null),
         );
     }
 
-    public function isRevoked(): bool
+    public function isConsumed(): bool
     {
-        return $this->revokedAt !== null;
+        return $this->consumedAt !== null;
     }
 
     public function isExpired(DateTimeImmutable $now): bool
