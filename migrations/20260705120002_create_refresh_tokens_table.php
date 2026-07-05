@@ -15,7 +15,8 @@ final class CreateRefreshTokensTable extends AbstractMigration
 {
     public function change(): void
     {
-        $this->table('refresh_tokens', ['signed' => false, 'comment' => 'Refresh 토큰'])
+        $this->table('refresh_tokens', ['id' => false, 'primary_key' => ['id'], 'comment' => 'Refresh 토큰'])
+            ->addColumn('id', 'biginteger', ['identity' => true, 'signed' => false])
             ->addColumn('user_id', 'biginteger', ['signed' => false])
             ->addColumn('token_hash', 'string', ['limit' => 64, 'comment' => 'SHA-256(hex)'])
             ->addColumn('expires_at', 'datetime')

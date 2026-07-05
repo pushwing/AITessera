@@ -18,7 +18,8 @@ final class CreateUsersTable extends AbstractMigration
 {
     public function change(): void
     {
-        $this->table('users', ['signed' => false, 'comment' => '인증 사용자'])
+        $this->table('users', ['id' => false, 'primary_key' => ['id'], 'comment' => '인증 사용자'])
+            ->addColumn('id', 'biginteger', ['identity' => true, 'signed' => false])
             ->addColumn('email', 'string', ['limit' => 255, 'comment' => '로그인 ID'])
             ->addColumn('password_hash', 'string', ['limit' => 255, 'comment' => 'Argon2id 해시'])
             ->addColumn('affiliation', 'string', ['limit' => 20, 'comment' => 'aicura|aicopia|aicreo|aivance|ailicet'])
