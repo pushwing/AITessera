@@ -6,6 +6,7 @@ namespace App\Domain\Request;
 
 use App\Domain\Affiliation;
 use App\Domain\PasswordPolicy;
+use App\Domain\ProfileSchema;
 use App\Exception\ValidationException;
 use Respect\Validation\Exceptions\NestedValidationException;
 use Respect\Validation\Validator as v;
@@ -13,8 +14,7 @@ use Respect\Validation\Validator as v;
 /**
  * 회원가입 요청 DTO — respect/validation 으로 검증 후 생성한다.
  *
- * `profile` 은 소속별 부가 항목을 담는 자유 형식(free-form) 배열이며, 이번 범위에서는
- * 구조 검증 없이 그대로 저장한다(소속별 스키마 검증은 이슈 #8 에서 다룬다).
+ * `profile` 은 소속별 부가 항목을 담으며, 선택한 소속의 스키마(ProfileSchema)로 검증한다.
  */
 final readonly class RegisterRequest
 {
@@ -51,7 +51,6 @@ final readonly class RegisterRequest
                 ->key('company', v::optional(v::stringType()), false)
                 ->key('terms_agreed', v::trueVal())
                 ->key('third_party_agreed', v::trueVal())
-                ->key('profile', v::optional(v::arrayType()), false)
                 ->assert($data);
         } catch (NestedValidationException $e) {
             $errors = array_values($e->getMessages());
@@ -62,12 +61,22 @@ final readonly class RegisterRequest
             $errors[] = PasswordPolicy::describe();
         }
 
+        // profile 은 소속이 유효할 때만 해당 소속 스키마로 검증한다.
+        $profile = $data['profile'] ?? [];
+        $affiliationValue = $data['affiliation'] ?? null;
+        if (is_string($affiliationValue) && in_array($affiliationValue, $affiliations, true)) {
+            if (is_array($profile)) {
+                $errors = array_merge($errors, ProfileSchema::validate(Affiliation::from($affiliationValue), $profile));
+            } else {
+                $errors[] = 'profile 은(는) 객체 형식이어야 합니다.';
+            }
+        }
+
         if ($errors !== []) {
             throw new ValidationException($errors);
         }
 
         $company = $data['company'] ?? null;
-        $profile = $data['profile'] ?? [];
 
         return new self(
             email: (string) $data['email'],

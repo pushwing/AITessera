@@ -29,12 +29,11 @@ final class RegisterRequestTest extends TestCase
 
     public function testValidDataProducesDto(): void
     {
-        $request = RegisterRequest::fromArray(self::validData() + ['company' => 'AIvance', 'profile' => ['team' => 'ops']]);
+        $request = RegisterRequest::fromArray(self::validData() + ['company' => 'AIvance']);
 
         self::assertSame('user@aivance.test', $request->email);
         self::assertSame(Affiliation::Aivance, $request->affiliation);
         self::assertSame('AIvance', $request->company);
-        self::assertSame(['team' => 'ops'], $request->profile);
     }
 
     public function testCompanyAndProfileAreOptional(): void
@@ -43,6 +42,30 @@ final class RegisterRequestTest extends TestCase
 
         self::assertNull($request->company);
         self::assertSame([], $request->profile);
+    }
+
+    public function testValidAffiliationProfilePasses(): void
+    {
+        $request = RegisterRequest::fromArray(
+            ['affiliation' => 'aicura', 'profile' => ['age' => 30, 'sex' => 'M', 'where_from' => 'Seoul']] + self::validData(),
+        );
+
+        self::assertSame(['age' => 30, 'sex' => 'M', 'where_from' => 'Seoul'], $request->profile);
+    }
+
+    public function testInvalidProfileFieldThrows(): void
+    {
+        $this->expectException(ValidationException::class);
+        RegisterRequest::fromArray(
+            ['affiliation' => 'aicopia', 'profile' => ['birthday' => 'not-a-date']] + self::validData(),
+        );
+    }
+
+    public function testProfileFieldForFieldlessAffiliationThrows(): void
+    {
+        // 기본 validData 의 소속은 aivance(추가필드 없음) → 어떤 profile 키도 거절.
+        $this->expectException(ValidationException::class);
+        RegisterRequest::fromArray(['profile' => ['age' => 1]] + self::validData());
     }
 
     public function testWeakPasswordThrows(): void
