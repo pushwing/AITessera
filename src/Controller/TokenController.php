@@ -31,6 +31,16 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens',
         summary: '로그인 — 토큰 발급',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['email', 'password'],
+                properties: [
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'admin@aivance.test'),
+                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'password1234!'),
+                ],
+            ),
+        ),
         tags: ['Auth'],
         responses: [
             new OA\Response(response: 201, description: '토큰 발급'),
@@ -49,6 +59,15 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens/refresh',
         summary: 'Refresh 토큰으로 재발급 (회전)',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['refresh_token'],
+                properties: [
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ],
+            ),
+        ),
         tags: ['Auth'],
         responses: [
             new OA\Response(response: 200, description: '재발급'),
@@ -66,6 +85,15 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens',
         summary: '로그아웃 — Refresh 토큰 무효화',
         security: [],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['refresh_token'],
+                properties: [
+                    new OA\Property(property: 'refresh_token', type: 'string'),
+                ],
+            ),
+        ),
         tags: ['Auth'],
         responses: [new OA\Response(response: 204, description: '무효화 완료')],
     )]
