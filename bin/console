@@ -1,0 +1,52 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// AITessera CLI 진입점.
+// 현재는 phinx 마이그레이션 위임만 지원한다. 큐 컨슈머·시더(seed:admin) 등은 이후 작업에서 확장한다.
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$command = $argv[1] ?? 'list';
+
+$runPhinx = static function (array $args): int {
+    $bin  = dirname(__DIR__) . '/vendor/bin/phinx';
+    $conf = dirname(__DIR__) . '/phinx.php';
+    $cmd  = escapeshellarg($bin) . ' ' . implode(' ', array_map('escapeshellarg', $args))
+        . ' -c ' . escapeshellarg($conf);
+    passthru($cmd, $exitCode);
+
+    return $exitCode;
+};
+
+$usage = static function (): int {
+    fwrite(STDOUT, <<<TXT
+    AITessera 콘솔
+
+    사용법:
+      php bin/console <command>
+
+    사용 가능한 커맨드:
+      migrate     대기 중인 마이그레이션 실행
+      rollback    마지막 마이그레이션 롤백
+      seed:run    시더 실행
+
+    TXT);
+
+    return 0;
+};
+
+$exitCode = match ($command) {
+    'migrate'          => $runPhinx(['migrate']),
+    'rollback'         => $runPhinx(['rollback']),
+    'seed:run'         => $runPhinx(['seed:run']),
+    'list', '--help', '-h' => $usage(),
+    default            => (static function (string $c): int {
+        fwrite(STDERR, "알 수 없는 커맨드: {$c}\n실행 가능한 커맨드는 `php bin/console list` 로 확인하세요.\n");
+
+        return 1;
+    })($command),
+};
+
+exit($exitCode);
