@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Middleware\RateLimitMiddleware;
 use App\Repository\EmailVerificationRepository;
 use App\Repository\EmailVerificationRepositoryInterface;
 use App\Repository\RefreshTokenRepository;
@@ -30,6 +31,11 @@ use Predis\Client as RedisClient;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Symfony\Component\Cache\Adapter\RedisAdapter;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\Storage\CacheStorage;
+use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
+use Symfony\Component\RateLimiter\Storage\StorageInterface;
 
 /**
  * DI 컨테이너 정의 (PHP-DI).
@@ -57,6 +63,33 @@ return [
 
     // 메일러 — 개발용 로그 구현 (운영은 symfony/mailer SMTP 로 교체)
     MailerInterface::class => autowire(LogMailer::class),
+
+    // 레이트 리밋 저장소 — 테스트는 인메모리(무-Redis), 그 외 Redis 캐시
+    StorageInterface::class => factory(static function (Config $config, RedisClient $redis): StorageInterface {
+        if ($config->appEnv === 'testing') {
+            return new InMemoryStorage();
+        }
+
+        return new CacheStorage(new RedisAdapter($redis, 'ratelimit'));
+    }),
+
+    // 레이트 리밋 정책 — 인증(엄격) / 일반 API
+    'rate_limiter.auth' => factory(static fn (Config $config, StorageInterface $storage): RateLimiterFactory => new RateLimiterFactory([
+        'id' => 'auth',
+        'policy' => 'sliding_window',
+        'limit' => $config->rateLimitAuth,
+        'interval' => '1 minute',
+    ], $storage)),
+    'rate_limiter.api' => factory(static fn (Config $config, StorageInterface $storage): RateLimiterFactory => new RateLimiterFactory([
+        'id' => 'api',
+        'policy' => 'sliding_window',
+        'limit' => $config->rateLimitApi,
+        'interval' => '1 minute',
+    ], $storage)),
+
+    RateLimitMiddleware::class => autowire()
+        ->constructorParameter('authLimiter', get('rate_limiter.auth'))
+        ->constructorParameter('apiLimiter', get('rate_limiter.api')),
 
     // PSR-17 팩토리 — 하나의 nyholm 인스턴스를 여러 인터페이스에 바인딩
     Psr17Factory::class => autowire(),

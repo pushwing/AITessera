@@ -83,6 +83,33 @@ final class PipelineTest extends TestCase
         self::assertSame('UNAUTHORIZED', $this->decode($response)['code']);
     }
 
+    public function testSensitiveEndpointIsRateLimited(): void
+    {
+        // 인증 엔드포인트 기본 한도는 10/분. 11번째 요청은 429 + Retry-After.
+        // (RateLimit 은 라우팅보다 앞서므로 빈 본문의 422 여부와 무관하게 토큰을 소비한다.)
+        $response = null;
+        for ($i = 0; $i < 11; $i++) {
+            $response = $this->handle('POST', '/api/v1/tokens');
+        }
+
+        self::assertNotNull($response);
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame('RATE_LIMITED', $this->decode($response)['code']);
+        self::assertNotSame('', $response->getHeaderLine('Retry-After'));
+    }
+
+    public function testHealthIsNotRateLimited(): void
+    {
+        // 헬스 프로브는 제외 대상 — 한도를 넘겨 호출해도 항상 200.
+        $response = null;
+        for ($i = 0; $i < 15; $i++) {
+            $response = $this->handle('GET', '/health');
+        }
+
+        self::assertNotNull($response);
+        self::assertSame(200, $response->getStatusCode());
+    }
+
     public function testProtectedRouteWithMalformedTokenReturns401(): void
     {
         $response = $this->handle('GET', '/api/v1/me', ['Authorization' => 'Bearer not-a-jwt']);
