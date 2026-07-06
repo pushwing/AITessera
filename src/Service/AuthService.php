@@ -8,6 +8,7 @@ use App\Domain\RefreshToken;
 use App\Domain\Request\LoginRequest;
 use App\Domain\TokenPair;
 use App\Domain\User;
+use App\Domain\UserRole;
 use App\Exception\EmailNotVerifiedException;
 use App\Exception\InvalidCredentialsException;
 use App\Exception\InvalidTokenException;
@@ -51,7 +52,7 @@ final readonly class AuthService
             throw new EmailNotVerifiedException();
         }
 
-        $pair = $this->issuePair($user->id, $user->affiliation->value);
+        $pair = $this->issuePair($user->id, $user->affiliation->value, $user->role);
         $this->users->updateLastLogin($user->id, $this->clock->now());
 
         return $pair;
@@ -88,7 +89,7 @@ final readonly class AuthService
         return $this->db->transaction(function () use ($token, $user, $now): TokenPair {
             $this->refreshTokens->revoke($token->id, $now);
 
-            return $this->issuePair($user->id, $user->affiliation->value);
+            return $this->issuePair($user->id, $user->affiliation->value, $user->role);
         });
     }
 
@@ -105,9 +106,9 @@ final readonly class AuthService
         }
     }
 
-    private function issuePair(int $userId, string $affiliation): TokenPair
+    private function issuePair(int $userId, string $affiliation, UserRole $role): TokenPair
     {
-        $access = $this->jwt->issueAccessToken($userId, $affiliation);
+        $access = $this->jwt->issueAccessToken($userId, $affiliation, $role);
         $refresh = $this->jwt->generateRefreshToken();
         $this->refreshTokens->store($userId, $refresh['hash'], $refresh['expiresAt']);
 

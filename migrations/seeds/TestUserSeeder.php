@@ -7,8 +7,9 @@ use Phinx\Seed\AbstractSeed;
 /**
  * 개발·수동 테스트용 사용자 시더 (idempotent).
  *
- * 이메일 인증이 완료된 활성 계정을 하나 생성한다. 운영 배포 시 자동 실행되지 않으며,
- * 필요할 때만 `php bin/console seed:run` 으로 수동 실행한다.
+ * 이메일 인증이 완료된 활성 운영자 계정을 하나 생성한다. 운영 배포 시 자동 실행되지 않으며,
+ * 필요할 때만 `php bin/console seed:run` 으로 수동 실행한다. 회원구분은 운영자(role=1)이므로
+ * 이 계정으로 운영자 전용 엔드포인트(POST /api/v1/operators)를 테스트할 수 있다.
  *
  *   이메일: admin@aivance.test / 비밀번호: password1234!
  */
@@ -29,6 +30,7 @@ final class TestUserSeeder extends AbstractSeed
                 'email' => 'admin@aivance.test',
                 'password_hash' => password_hash('password1234!', PASSWORD_ARGON2ID),
                 'affiliation' => 'aivance',
+                'role' => 1, // 운영자
                 'name' => '관리자',
                 'contact' => '010-0000-0000',
                 'company' => 'AIvance',

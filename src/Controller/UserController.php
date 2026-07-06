@@ -30,28 +30,12 @@ final class UserController extends BaseController
         path: '/api/v1/users',
         summary: '회원가입',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['email', 'password', 'affiliation', 'name', 'contact', 'terms_agreed', 'third_party_agreed'],
-                properties: [
-                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'user@aivance.test'),
-                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'password1234!', description: '10자 이상, 영문·숫자·특수문자 각 1개 이상'),
-                    new OA\Property(property: 'affiliation', type: 'string', enum: ['aicura', 'aicopia', 'aicreo', 'aivance', 'ailicet'], example: 'aivance'),
-                    new OA\Property(property: 'name', type: 'string', example: '홍길동'),
-                    new OA\Property(property: 'contact', type: 'string', example: '010-1234-5678'),
-                    new OA\Property(property: 'company', type: 'string', nullable: true, example: 'AIvance'),
-                    new OA\Property(property: 'terms_agreed', type: 'boolean', example: true),
-                    new OA\Property(property: 'third_party_agreed', type: 'boolean', example: true),
-                    new OA\Property(property: 'profile', type: 'object', description: '소속별 부가 항목 (docs/profile-fields.md 참고)', additionalProperties: true),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/RegisterRequest')),
         tags: ['Users'],
         responses: [
-            new OA\Response(response: 201, description: '가입 완료(이메일 인증 대기)'),
-            new OA\Response(response: 409, description: '이미 가입된 이메일'),
-            new OA\Response(response: 422, description: '유효성 검사 실패'),
+            new OA\Response(response: 201, description: '가입 완료(이메일 인증 대기)', content: new OA\JsonContent(ref: '#/components/schemas/RegisteredResponse')),
+            new OA\Response(response: 409, description: '이미 가입된 이메일 (ALREADY_EXISTS)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 422, description: '유효성 검사 실패 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function register(ServerRequestInterface $request): ResponseInterface
@@ -69,27 +53,13 @@ final class UserController extends BaseController
     #[OA\Post(
         path: '/api/v1/users/verify',
         summary: '이메일 인증',
+        description: '회원가입 시 이메일로 발송된 인증 토큰으로 계정을 활성화한다. 로그인 Access 토큰(JWT)이 아니다.',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['token'],
-                properties: [
-                    new OA\Property(
-                        property: 'token',
-                        type: 'string',
-                        description: '회원가입 시 이메일로 발송된 **이메일 인증 토큰**(64자 hex). '
-                            . '로그인 응답의 Access 토큰(JWT `eyJ...`)이 아닙니다. '
-                            . 'dev 환경에서는 var/logs/mail-*.log 의 인증 링크(?token=...)에서 확인할 수 있습니다.',
-                        example: 'f9ea9eabf2a507f671e1d69b3c2a8d40e1b7c6a9f0d3e2b1a4c5d6e7f8091a2b',
-                    ),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/EmailVerificationRequest')),
         tags: ['Users'],
         responses: [
             new OA\Response(response: 200, description: '인증 완료'),
-            new OA\Response(response: 401, description: '토큰 무효·만료'),
+            new OA\Response(response: 401, description: '토큰 무효·만료·재사용 (INVALID_TOKEN/TOKEN_EXPIRED)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function verify(ServerRequestInterface $request): ResponseInterface
@@ -103,18 +73,14 @@ final class UserController extends BaseController
     #[OA\Post(
         path: '/api/v1/users/verify/resend',
         summary: '인증 메일 재발송',
+        description: '이메일 존재 여부를 노출하지 않도록, 대상이 없거나 이미 인증된 경우에도 202 로 응답한다.',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['email'],
-                properties: [
-                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'user@aivance.test'),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/EmailResendRequest')),
         tags: ['Users'],
-        responses: [new OA\Response(response: 202, description: '재발송 요청 접수')],
+        responses: [
+            new OA\Response(response: 202, description: '재발송 요청 접수'),
+            new OA\Response(response: 422, description: 'email 누락 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+        ],
     )]
     public function resend(ServerRequestInterface $request): ResponseInterface
     {

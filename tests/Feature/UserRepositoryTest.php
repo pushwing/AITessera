@@ -76,4 +76,28 @@ final class UserRepositoryTest extends TestCase
         self::assertSame('aivance', $row['affiliation']);
         self::assertNotNull($row['email_verified_at']);
     }
+
+    public function testFindProfileByIdReturnsSafeColumns(): void
+    {
+        $id = $this->repository->create(
+            email: 'itest-' . bin2hex(random_bytes(5)) . '@aivance.test',
+            passwordHash: password_hash('irrelevant', PASSWORD_BCRYPT),
+            affiliation: 'aicura',
+            name: '프로필테스트',
+            contact: '010-1111-2222',
+            company: 'AIvance',
+            profile: ['age' => 30, 'sex' => 'M', 'where_from' => 'Seoul'],
+            agreedAt: new DateTimeImmutable('2026-07-06 09:00:00'),
+        );
+
+        $row = $this->repository->findProfileById($id);
+
+        self::assertNotNull($row);
+        self::assertArrayNotHasKey('password_hash', $row, 'password_hash 는 절대 노출되면 안 된다');
+        self::assertSame('프로필테스트', $row['name']);
+        self::assertArrayHasKey('created_at', $row);
+
+        $profile = json_decode((string) $row['profile'], true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(['age' => 30, 'sex' => 'M', 'where_from' => 'Seoul'], $profile);
+    }
 }
