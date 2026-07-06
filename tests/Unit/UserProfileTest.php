@@ -22,6 +22,7 @@ final class UserProfileTest extends TestCase
             'email' => 'admin@aivance.test',
             'name' => '관리자',
             'affiliation' => 'aivance',
+            'role' => 3,
             'contact' => '010-0000-0000',
             'company' => 'AIvance',
             'profile' => null,
@@ -37,6 +38,7 @@ final class UserProfileTest extends TestCase
         self::assertSame(1, $data['id']);
         self::assertSame('admin@aivance.test', $data['email']);
         self::assertSame('aivance', $data['affiliation']);
+        self::assertSame(3, $data['role']);
         self::assertTrue($data['email_verified']);
         self::assertNull($data['profile']);
         self::assertArrayNotHasKey('password_hash', $data);

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Domain\EmailVerification;
+use App\Domain\Request\CreateOperatorRequest;
 use App\Domain\Request\RegisterRequest;
 use App\Domain\User;
 use App\Domain\UserProfile;
+use App\Domain\UserRole;
 use App\Exception\AlreadyExistsException;
+use App\Exception\ForbiddenException;
 use App\Exception\InvalidTokenException;
 use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
@@ -77,6 +80,7 @@ final readonly class UserService
                 company: $request->company,
                 profile: $request->profile,
                 agreedAt: $now,
+                role: UserRole::Member, // 자가가입은 항상 일반회원
             );
             $this->verifications->store($newId, $this->hash($token), $expiresAt);
 
@@ -86,6 +90,60 @@ final readonly class UserService
         $this->enqueueVerificationEmail($request->email, $token);
 
         return $userId;
+    }
+
+    /**
+     * 운영자에 의한 계정 생성 — 운영자·대행사 계정을 만든다(이슈 #29).
+     *
+     * 운영자는 자기 소속(affiliation)과 동일한 계정만 생성할 수 있다. 신뢰 채널로 생성하는
+     * 계정이므로 이메일 인증을 즉시 완료 처리하고 인증 메일은 발송하지 않는다.
+     *
+     * @param int $creatorUserId 생성을 요청한 운영자의 사용자 id
+     *
+     * @return int 생성된 사용자 id
+     */
+    public function createOperatorAccount(CreateOperatorRequest $request, int $creatorUserId): int
+    {
+        $creatorRow = $this->users->findById($creatorUserId);
+        if ($creatorRow === null) {
+            throw new NotFoundException('생성 요청자를 찾을 수 없습니다.');
+        }
+
+        // 정지된 계정은 토큰이 아직 유효해도(발급 후 ≤15분) 신규 계정을 만들 수 없다.
+        // findById 는 is_active 를 보지 않으므로 여기서 명시적으로 막는다.
+        $creator = User::fromRow($creatorRow);
+        if (!$creator->isActive) {
+            throw new ForbiddenException('비활성화된 계정은 이 작업을 수행할 수 없습니다.');
+        }
+
+        // 소속 스코핑: 운영자는 자기 소속의 계정만 생성 가능(소속 간 권한 경계).
+        if ($creator->affiliation !== $request->affiliation) {
+            throw new ForbiddenException('본인 소속의 계정만 생성할 수 있습니다.');
+        }
+
+        if ($this->users->emailExists($request->email)) {
+            throw new AlreadyExistsException('이미 가입된 이메일입니다.');
+        }
+
+        $now = $this->clock->now();
+
+        return $this->db->transaction(function () use ($request, $now): int {
+            $newId = $this->users->create(
+                email: $request->email,
+                passwordHash: password_hash($request->password, PASSWORD_ARGON2ID),
+                affiliation: $request->affiliation->value,
+                name: $request->name,
+                contact: $request->contact,
+                company: $request->company,
+                profile: $request->profile,
+                agreedAt: $now,
+                role: $request->role,
+            );
+            // 운영자가 신뢰 채널로 생성 → 이메일 인증 즉시 완료
+            $this->users->markEmailVerified($newId, $now);
+
+            return $newId;
+        });
     }
 
     /**

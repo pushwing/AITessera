@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Domain\UserRole;
 use App\Support\Config;
 use App\Support\JwtIssuer;
 use DateTimeImmutable;
@@ -45,9 +46,9 @@ final class JwtIssuerTest extends TestCase
         $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);
     }
 
-    public function testAccessTokenCarriesSubjectAndAffiliation(): void
+    public function testAccessTokenCarriesSubjectAffiliationAndRole(): void
     {
-        $jwt = $this->issuer->issueAccessToken(42, 'aivance');
+        $jwt = $this->issuer->issueAccessToken(42, 'aivance', UserRole::Operator);
 
         $config = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
         $token = $config->parser()->parse($jwt);
@@ -55,6 +56,7 @@ final class JwtIssuerTest extends TestCase
 
         self::assertSame('42', $token->claims()->get('sub'));
         self::assertSame('aivance', $token->claims()->get('aff'));
+        self::assertSame(UserRole::Operator->value, (int) $token->claims()->get('role'));
     }
 
     public function testRefreshTokenHashIsDeterministicSha256(): void

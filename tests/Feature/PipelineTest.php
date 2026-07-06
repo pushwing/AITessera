@@ -227,6 +227,8 @@ final class PipelineTest extends TestCase
             ->issuedAt($now)
             ->expiresAt($now->modify(sprintf('%+d seconds', $expiresInSeconds)))
             ->relatedTo((string) $userId)
+            ->withClaim('aff', 'aivance')
+            ->withClaim('role', 3)
             ->getToken($config->signer(), $config->signingKey())
             ->toString();
     }

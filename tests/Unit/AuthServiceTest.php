@@ -215,6 +215,7 @@ final class AuthServiceTest extends TestCase
             'email' => 'user@aivance.test',
             'password_hash' => password_hash(self::PASSWORD, PASSWORD_BCRYPT),
             'affiliation' => 'aivance',
+            'role' => 3,
             'is_active' => 1,
             'email_verified_at' => '2026-07-01 00:00:00',
         ], $overrides);

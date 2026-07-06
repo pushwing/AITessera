@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Domain\Affiliation;
+use App\Domain\Request\CreateOperatorRequest;
 use App\Domain\Request\RegisterRequest;
+use App\Domain\UserRole;
 use App\Exception\AlreadyExistsException;
+use App\Exception\ForbiddenException;
 use App\Exception\InvalidTokenException;
 use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
@@ -55,6 +58,7 @@ final class UserServiceTest extends TestCase
             'email' => 'user@aivance.test',
             'name' => '홍길동',
             'affiliation' => 'aivance',
+            'role' => 3,
             'contact' => '010-1234-5678',
             'company' => 'AIvance',
             'profile' => '{"team":"ops"}',
@@ -116,6 +120,62 @@ final class UserServiceTest extends TestCase
         $this->expectException(AlreadyExistsException::class);
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
             ->register($this->registerRequest());
+    }
+
+    public function testCreateOperatorAccountCreatesRoleAndMarksVerified(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        // 요청 운영자(생성자) — 소속 aivance
+        $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1]));
+        $users->method('emailExists')->willReturn(false);
+        $users->expects(self::once())->method('create')->willReturn(200);
+        // 즉시 인증 완료 처리
+        $users->expects(self::once())->method('markEmailVerified')->with(200);
+
+        // 운영자 계정 생성 흐름에서는 인증 메일을 큐에 넣지 않는다.
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->expects(self::never())->method('push');
+
+        $newId = $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
+            ->createOperatorAccount($this->createOperatorRequest(), 100);
+
+        self::assertSame(200, $newId);
+    }
+
+    public function testCreateOperatorAccountRejectsDifferentAffiliation(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        // 생성자 소속은 aicura 인데 요청 소속은 aivance → 소속 불일치
+        $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1, 'affiliation' => 'aicura']));
+        $users->expects(self::never())->method('create');
+
+        $this->expectException(ForbiddenException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->createOperatorAccount($this->createOperatorRequest(), 100);
+    }
+
+    public function testCreateOperatorAccountRejectsInactiveCreator(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        // 정지된 운영자(is_active=0) — 토큰이 아직 유효해도 계정 생성 불가
+        $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1, 'is_active' => 0]));
+        $users->expects(self::never())->method('create');
+
+        $this->expectException(ForbiddenException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->createOperatorAccount($this->createOperatorRequest(), 100);
+    }
+
+    public function testCreateOperatorAccountRejectsDuplicateEmail(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1]));
+        $users->method('emailExists')->willReturn(true);
+        $users->expects(self::never())->method('create');
+
+        $this->expectException(AlreadyExistsException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->createOperatorAccount($this->createOperatorRequest(), 100);
     }
 
     public function testVerifyEmailMarksUserVerifiedAndConsumesToken(): void
@@ -253,6 +313,20 @@ final class UserServiceTest extends TestCase
         );
     }
 
+    private function createOperatorRequest(): CreateOperatorRequest
+    {
+        return new CreateOperatorRequest(
+            email: 'agency@aivance.test',
+            password: 'password1234!',
+            role: UserRole::Agency,
+            affiliation: Affiliation::Aivance,
+            name: '대행사담당자',
+            contact: '010-1234-5678',
+            company: null,
+            profile: [],
+        );
+    }
+
     /**
      * @param array<string, mixed> $overrides
      *
@@ -265,6 +339,7 @@ final class UserServiceTest extends TestCase
             'email' => 'user@aivance.test',
             'password_hash' => 'x',
             'affiliation' => 'aivance',
+            'role' => 3,
             'is_active' => 1,
             'email_verified_at' => null,
         ], $overrides);
