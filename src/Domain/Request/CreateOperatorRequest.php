@@ -13,10 +13,11 @@ use Respect\Validation\Exceptions\NestedValidationException;
 use Respect\Validation\Validator as v;
 
 /**
- * 운영자에 의한 계정 생성 요청 DTO — 운영자 전용 엔드포인트에서 사용한다(이슈 #29).
+ * 운영자에 의한 계정 생성 요청 DTO — 운영자 전용 엔드포인트에서 사용한다(이슈 #29·#34).
  *
- * `role` 은 운영자(1)·대행사(2)만 허용한다. 일반회원(3)은 공개 자가가입 전용이므로 이 경로로는
- * 만들 수 없다(혼동·우회 방지). 약관 동의 필드는 받지 않으며, 생성 시 서비스가 동의 시각을 채운다.
+ * `role` 은 운영자(1)·대행사(2)·일반회원(3)을 모두 허용한다(이슈 #34에서 회원 생성 추가).
+ * 자가가입(POST /api/v1/users)과 달리 이메일 인증이 즉시 완료된다. 약관 동의 필드는 받지
+ * 않으며, 생성 시 서비스가 동의 시각을 채운다.
  */
 final readonly class CreateOperatorRequest
 {
@@ -43,8 +44,8 @@ final readonly class CreateOperatorRequest
     public static function fromArray(array $data): self
     {
         $affiliations = array_map(static fn (Affiliation $a): string => $a->value, Affiliation::cases());
-        // 이 엔드포인트로 만들 수 있는 구분: 운영자(1)·대행사(2). 일반회원(3)은 금지.
-        $creatableRoles = [UserRole::Operator->value, UserRole::Agency->value];
+        // 이 엔드포인트로 만들 수 있는 구분: 운영자(1)·대행사(2)·일반회원(3) 전부(이슈 #34).
+        $creatableRoles = array_map(static fn (UserRole $r): int => $r->value, UserRole::cases());
 
         $errors = [];
         try {

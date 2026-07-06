@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Controller\AdminUserController;
 use App\Controller\DocsController;
 use App\Controller\HealthController;
 use App\Controller\LogController;
@@ -41,6 +42,11 @@ return static function (RouteCollector $r): void {
     // 보호 — 현재 사용자 (JWT 필요)
     $r->addRoute('GET', '/api/v1/me', [MeController::class, 'show']);
 
-    // 보호 — 운영자 전용: 운영자·대행사 계정 생성 (#[RequireRole(Operator)])
+    // 보호 — 운영자 전용: 운영자·대행사·일반회원 계정 생성 (#[RequireRole(Operator)])
     $r->addRoute('POST', '/api/v1/operators', [OperatorController::class, 'create']);
+
+    // 보호 — 운영자 전용: 회원 관리 (목록·상세·수정) (#[RequireRole(Operator)])
+    $r->addRoute('GET', '/api/v1/users', [AdminUserController::class, 'index']);
+    $r->addRoute('GET', '/api/v1/users/{id:\d+}', [AdminUserController::class, 'show']);
+    $r->addRoute('PATCH', '/api/v1/users/{id:\d+}', [AdminUserController::class, 'update']);
 };

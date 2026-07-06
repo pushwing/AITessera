@@ -16,6 +16,15 @@ final readonly class UserRepository implements UserRepositoryInterface
 {
     private const string COLUMNS = 'id, email, password_hash, affiliation, role, is_active, email_verified_at';
     private const string PROFILE_COLUMNS = 'id, email, name, affiliation, role, contact, company, profile, email_verified_at, created_at';
+    private const string LIST_COLUMNS = 'id, email, name, affiliation, role, is_active, email_verified_at, created_at';
+    private const string MANAGE_COLUMNS = 'id, email, name, affiliation, role, is_active, contact, company, profile, email_verified_at, last_login_at, created_at';
+
+    /**
+     * updateFields 로 수정 가능한 컬럼 화이트리스트 — 임의 컬럼 주입 방지(방어적 이중 방벽).
+     *
+     * @var list<string>
+     */
+    private const array UPDATABLE_COLUMNS = ['name', 'contact', 'company', 'profile', 'role', 'is_active'];
 
     public function __construct(private ConnectionInterface $db)
     {
@@ -129,5 +138,134 @@ final readonly class UserRepository implements UserRepositoryInterface
             'updated_at' => $timestamp,
             'id' => $id,
         ]);
+    }
+
+    public function paginateByAffiliation(
+        string $affiliation,
+        ?int $role,
+        ?bool $isActive,
+        ?string $search,
+        string $sortColumn,
+        string $sortDirection,
+        int $limit,
+        int $offset,
+    ): array {
+        [$where, $params] = $this->buildListWhere($affiliation, $role, $isActive, $search);
+
+        // $sortColumn·$sortDirection 은 호출부(UserListQuery)가 화이트리스트로 보장한 값만 들어온다.
+        $sql = 'SELECT ' . self::LIST_COLUMNS . ' FROM users
+             WHERE ' . $where . '
+             ORDER BY ' . $sortColumn . ' ' . $sortDirection . '
+             LIMIT :limit OFFSET :offset';
+
+        $stmt = $this->db->pdo()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue(':' . $key, $value);
+        }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return $rows;
+    }
+
+    public function countByAffiliation(
+        string $affiliation,
+        ?int $role,
+        ?bool $isActive,
+        ?string $search,
+    ): int {
+        [$where, $params] = $this->buildListWhere($affiliation, $role, $isActive, $search);
+
+        $stmt = $this->db->pdo()->prepare('SELECT COUNT(*) FROM users WHERE ' . $where);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function findManageableById(int $id, string $affiliation): ?array
+    {
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT ' . self::MANAGE_COLUMNS . ' FROM users
+             WHERE id = :id AND affiliation = :affiliation AND deleted_at IS NULL
+             LIMIT 1',
+        );
+        $stmt->execute(['id' => $id, 'affiliation' => $affiliation]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    public function updateFields(int $id, array $fields, DateTimeImmutable $at): void
+    {
+        // 화이트리스트 밖 컬럼은 무시한다(임의 컬럼 주입 방지).
+        $sets = [];
+        $params = [];
+        foreach ($fields as $column => $value) {
+            if (!in_array($column, self::UPDATABLE_COLUMNS, true)) {
+                continue;
+            }
+            $sets[] = $column . ' = :' . $column;
+            $params[$column] = $value;
+        }
+
+        if ($sets === []) {
+            return;
+        }
+
+        $sets[] = 'updated_at = :updated_at';
+        $params['updated_at'] = $at->format('Y-m-d H:i:s');
+        $params['id'] = $id;
+
+        $stmt = $this->db->pdo()->prepare(
+            'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = :id',
+        );
+        $stmt->execute($params);
+    }
+
+    public function updatePassword(int $id, string $passwordHash, DateTimeImmutable $at): void
+    {
+        $stmt = $this->db->pdo()->prepare(
+            'UPDATE users SET password_hash = :password_hash, updated_at = :updated_at WHERE id = :id',
+        );
+        $timestamp = $at->format('Y-m-d H:i:s');
+        $stmt->execute([
+            'password_hash' => $passwordHash,
+            'updated_at' => $timestamp,
+            'id' => $id,
+        ]);
+    }
+
+    /**
+     * 목록·건수 공용 WHERE 절과 바인딩 파라미터를 조립한다.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function buildListWhere(
+        string $affiliation,
+        ?int $role,
+        ?bool $isActive,
+        ?string $search,
+    ): array {
+        $conditions = ['affiliation = :affiliation', 'deleted_at IS NULL'];
+        $params = ['affiliation' => $affiliation];
+
+        if ($role !== null) {
+            $conditions[] = 'role = :role';
+            $params['role'] = $role;
+        }
+        if ($isActive !== null) {
+            $conditions[] = 'is_active = :is_active';
+            $params['is_active'] = $isActive ? 1 : 0;
+        }
+        if ($search !== null && $search !== '') {
+            $conditions[] = '(email LIKE :search OR name LIKE :search)';
+            $params['search'] = '%' . $search . '%';
+        }
+
+        return [implode(' AND ', $conditions), $params];
     }
 }
