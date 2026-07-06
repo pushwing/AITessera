@@ -7,8 +7,10 @@ namespace App\Service;
 use App\Domain\EmailVerification;
 use App\Domain\Request\RegisterRequest;
 use App\Domain\User;
+use App\Domain\UserProfile;
 use App\Exception\AlreadyExistsException;
 use App\Exception\InvalidTokenException;
+use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
 use App\Repository\EmailVerificationRepositoryInterface;
 use App\Repository\UserRepositoryInterface;
@@ -35,6 +37,19 @@ final readonly class UserService
         private ClockInterface $clock,
         private ConnectionInterface $db,
     ) {
+    }
+
+    /**
+     * 현재 사용자의 프로필(민감정보 제외)을 조회한다.
+     */
+    public function me(int $userId): UserProfile
+    {
+        $row = $this->users->findProfileById($userId);
+        if ($row === null) {
+            throw new NotFoundException('사용자를 찾을 수 없습니다.');
+        }
+
+        return UserProfile::fromRow($row);
     }
 
     /**
