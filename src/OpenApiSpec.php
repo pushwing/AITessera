@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Support\Version;
 use OpenApi\Attributes as OA;
 
 /**
@@ -13,7 +14,7 @@ use OpenApi\Attributes as OA;
  * 공용 보안 스킴(bearerAuth)만 선언한다.
  */
 #[OA\Info(
-    version: '1.0.0',
+    version: Version::APP_VERSION,
     title: 'AITessera API',
     description: 'AIvance 제품군을 위한 JWT 기반 인증·인가 API',
 )]

@@ -7,11 +7,12 @@ namespace App\Support;
 /**
  * 애플리케이션 기본 메타 정보 홀더.
  *
- * 스캐폴딩 단계에서 PSR-4 오토로딩·정적분석·테스트 대상을 앵커링하기 위한 최소 클래스.
+ * 버전의 단일 출처(single source of truth). `/api/v1/health` 응답과 OpenAPI 문서
+ * (OpenApiSpec 의 Info.version)가 모두 이 상수를 참조하므로, 버전은 여기서만 올린다.
  */
 final class Version
 {
     public const string APP_NAME = 'AITessera';
 
-    public const string APP_VERSION = '0.1.0';
+    public const string APP_VERSION = '1.0.0';
 }
