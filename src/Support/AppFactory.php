@@ -9,6 +9,7 @@ use App\Middleware\ErrorHandlerMiddleware;
 use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Middleware\RouteDispatchMiddleware;
+use App\Middleware\TrailingSlashMiddleware;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -18,7 +19,7 @@ use Relay\Relay;
  * PSR-15 미들웨어 파이프라인(Relay) 조립기.
  *
  * 요청 처리 순서를 한 곳에서 규정한다:
- *   ErrorHandler → Cors → RateLimit → JwtAuth → RouteDispatch
+ *   ErrorHandler → TrailingSlash → Cors → RateLimit → JwtAuth → RouteDispatch
  */
 final class AppFactory
 {
@@ -29,6 +30,7 @@ final class AppFactory
      */
     private const array PIPELINE = [
         ErrorHandlerMiddleware::class,
+        TrailingSlashMiddleware::class,
         CorsMiddleware::class,
         RateLimitMiddleware::class,
         JwtAuthMiddleware::class,

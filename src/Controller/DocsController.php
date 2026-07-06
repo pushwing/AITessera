@@ -32,6 +32,7 @@ final readonly class DocsController
         return $this->responseFactory
             ->createResponse(200)
             ->withHeader('Content-Type', 'application/json; charset=utf-8')
+            ->withHeader('Cache-Control', 'no-store')
             ->withBody($this->streamFactory->createStream($this->generator->toJson()));
     }
 
@@ -40,11 +41,13 @@ final readonly class DocsController
         return $this->responseFactory
             ->createResponse(200)
             ->withHeader('Content-Type', 'text/html; charset=utf-8')
+            ->withHeader('Cache-Control', 'no-store')
             ->withBody($this->streamFactory->createStream($this->html()));
     }
 
     private function html(): string
     {
+        // RapiDoc — 좌측 API 목록(네비게이션) + Try-it-out + 스키마 자동 전개.
         return <<<HTML
         <!DOCTYPE html>
         <html lang="ko">
@@ -52,19 +55,27 @@ final readonly class DocsController
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>AITessera API 문서</title>
-          <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+          <script type="module" src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script>
+          <style>body { margin: 0; }</style>
         </head>
         <body>
-          <div id="swagger-ui"></div>
-          <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-          <script>
-            window.onload = function () {
-              window.ui = SwaggerUIBundle({
-                url: '{$this->specPath()}',
-                dom_id: '#swagger-ui',
-              });
-            };
-          </script>
+          <rapi-doc
+            spec-url="{$this->specPath()}"
+            render-style="focused"
+            nav-item-spacing="relaxed"
+            show-header="false"
+            allow-spec-url-load="false"
+            allow-spec-file-load="false"
+            allow-authentication="true"
+            persist-auth="true"
+            allow-try="true"
+            schema-style="table"
+            schema-expand-level="10"
+            default-schema-tab="schema"
+            theme="light"
+            regular-font="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+            style="height:100vh; width:100%;"
+          ></rapi-doc>
         </body>
         </html>
         HTML;

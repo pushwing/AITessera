@@ -112,13 +112,20 @@ final class PipelineTest extends TestCase
         self::assertArrayHasKey('bearerAuth', $spec['components']['securitySchemes']);
     }
 
-    public function testSwaggerUiPageIsServed(): void
+    public function testApiDocsPageIsServed(): void
     {
         $response = $this->handle('GET', '/api/docs');
 
         self::assertSame(200, $response->getStatusCode());
         self::assertStringContainsString('text/html', $response->getHeaderLine('Content-Type'));
-        self::assertStringContainsString('swagger-ui', (string) $response->getBody());
+        self::assertStringContainsString('rapi-doc', (string) $response->getBody());
+    }
+
+    public function testTrailingSlashIsNormalized(): void
+    {
+        // '/api/docs/' 도 '/api/docs' 처럼 동작해야 한다(공개 매칭·라우팅 일관).
+        self::assertSame(200, $this->handle('GET', '/api/docs/')->getStatusCode());
+        self::assertSame(200, $this->handle('GET', '/health/')->getStatusCode());
     }
 
     public function testLogIngestionAcceptsAndReturns202(): void
