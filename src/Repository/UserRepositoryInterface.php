@@ -53,4 +53,52 @@ interface UserRepositoryInterface
     public function markEmailVerified(int $id, DateTimeImmutable $at): void;
 
     public function updateLastLogin(int $id, DateTimeImmutable $at): void;
+
+    /**
+     * 특정 소속의 회원 목록을 페이징 조회한다(운영자용, 이슈 #34).
+     *
+     * @param string      $sortColumn    정렬 컬럼(호출부에서 화이트리스트 보장)
+     * @param string      $sortDirection 'ASC' 또는 'DESC'
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function paginateByAffiliation(
+        string $affiliation,
+        ?int $role,
+        ?bool $isActive,
+        ?string $search,
+        string $sortColumn,
+        string $sortDirection,
+        int $limit,
+        int $offset,
+    ): array;
+
+    /**
+     * paginateByAffiliation 와 동일 조건의 전체 건수(페이지네이션 meta 용).
+     */
+    public function countByAffiliation(
+        string $affiliation,
+        ?int $role,
+        ?bool $isActive,
+        ?string $search,
+    ): int;
+
+    /**
+     * 소속 스코프 안에서 관리 대상 회원 상세를 조회한다. 타 소속·미존재는 null(→ 404).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findManageableById(int $id, string $affiliation): ?array;
+
+    /**
+     * 회원의 지정 컬럼들을 수정한다(운영자용 부분 수정, 이슈 #34).
+     *
+     * @param array<string, mixed> $fields 컬럼명 => 값(호출부에서 화이트리스트 보장)
+     */
+    public function updateFields(int $id, array $fields, DateTimeImmutable $at): void;
+
+    /**
+     * 회원 비밀번호 해시를 교체한다(운영자에 의한 재설정).
+     */
+    public function updatePassword(int $id, string $passwordHash, DateTimeImmutable $at): void;
 }

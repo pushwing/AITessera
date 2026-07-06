@@ -23,7 +23,7 @@ use Throwable;
  *   - 일반회원 토큰 → 403(FORBIDDEN)
  *   - 토큰 없음 → 401(UNAUTHORIZED)
  *   - 타 소속 계정 생성 시도 → 403(FORBIDDEN)
- *   - 일반회원(3) 생성 시도 → 422(VALIDATION_ERROR)
+ *   - 일반회원(3) 생성 → 201 (이슈 #34에서 허용)
  *
  * DB 가 없으면 스킵한다. 생성 사용자는 tearDown 에서 이메일로 삭제한다(자식 테이블 FK CASCADE).
  */
@@ -136,15 +136,22 @@ final class OperatorJourneyTest extends TestCase
         self::assertSame('FORBIDDEN', $this->decode($response)['code']);
     }
 
-    public function testCannotCreateMemberRoleViaOperatorEndpoint(): void
+    public function testOperatorCreatesMemberAccount(): void
     {
         $operatorToken = $this->loginToken($this->seedUser('aivance', 1));
 
-        // 일반회원(3) 생성 시도 → 검증 실패(422)
-        $response = $this->handle('POST', '/api/v1/operators', $this->bearer($operatorToken), $this->createPayload($this->uniqueEmail('member'), 3, 'aivance'));
+        // 일반회원(3) 생성도 운영자 엔드포인트로 허용된다(이슈 #34).
+        $memberEmail = $this->uniqueEmail('member');
+        $response = $this->handle('POST', '/api/v1/operators', $this->bearer($operatorToken), $this->createPayload($memberEmail, 3, 'aivance'));
 
-        self::assertSame(422, $response->getStatusCode());
-        self::assertSame('VALIDATION_ERROR', $this->decode($response)['code']);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $data = $this->decode($response)['data'];
+        self::assertSame(3, $data['role']);
+        self::assertTrue($data['email_verified']);
+
+        // 이메일 인증 즉시 완료 → 곧바로 로그인 가능하다.
+        $login = $this->login($memberEmail);
+        self::assertSame(201, $login->getStatusCode());
     }
 
     // ── 헬퍼 ──────────────────────────────────────────────────────────────
