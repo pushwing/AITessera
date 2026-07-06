@@ -23,6 +23,13 @@ interface UserRepositoryInterface
      */
     public function findById(int $id): ?array;
 
+    /**
+     * `/me` 노출용 안전 컬럼(민감정보 제외)만 조회한다.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findProfileById(int $id): ?array;
+
     public function emailExists(string $email): bool;
 
     /**

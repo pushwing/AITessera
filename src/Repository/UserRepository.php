@@ -14,6 +14,7 @@ use PDO;
 final readonly class UserRepository implements UserRepositoryInterface
 {
     private const string COLUMNS = 'id, email, password_hash, affiliation, is_active, email_verified_at';
+    private const string PROFILE_COLUMNS = 'id, email, name, affiliation, contact, company, profile, email_verified_at, created_at';
 
     public function __construct(private ConnectionInterface $db)
     {
@@ -36,6 +37,19 @@ final readonly class UserRepository implements UserRepositoryInterface
     {
         $stmt = $this->db->pdo()->prepare(
             'SELECT ' . self::COLUMNS . ' FROM users
+             WHERE id = :id AND deleted_at IS NULL
+             LIMIT 1',
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : $row;
+    }
+
+    public function findProfileById(int $id): ?array
+    {
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT ' . self::PROFILE_COLUMNS . ' FROM users
              WHERE id = :id AND deleted_at IS NULL
              LIMIT 1',
         );

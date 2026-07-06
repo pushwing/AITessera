@@ -8,6 +8,7 @@ use App\Domain\Affiliation;
 use App\Domain\Request\RegisterRequest;
 use App\Exception\AlreadyExistsException;
 use App\Exception\InvalidTokenException;
+use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
 use App\Repository\EmailVerificationRepositoryInterface;
 use App\Repository\UserRepositoryInterface;
@@ -44,6 +45,41 @@ final class UserServiceTest extends TestCase
             emailVerifyTtl: 86400,
             appBaseUrl: 'http://localhost:9300/',
         );
+    }
+
+    public function testMeReturnsProfileWithoutSensitiveData(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findProfileById')->with(42)->willReturn([
+            'id' => 42,
+            'email' => 'user@aivance.test',
+            'name' => '홍길동',
+            'affiliation' => 'aivance',
+            'contact' => '010-1234-5678',
+            'company' => 'AIvance',
+            'profile' => '{"team":"ops"}',
+            'email_verified_at' => '2026-07-01 00:00:00',
+            'created_at' => '2026-07-01 09:00:00',
+        ]);
+
+        $profile = $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->me(42);
+
+        self::assertSame('user@aivance.test', $profile->email);
+        self::assertSame(Affiliation::Aivance, $profile->affiliation);
+        self::assertSame(['team' => 'ops'], $profile->profile);
+        self::assertTrue($profile->toArray()['email_verified']);
+        self::assertArrayNotHasKey('password_hash', $profile->toArray());
+    }
+
+    public function testMeThrowsNotFoundForUnknownUser(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findProfileById')->willReturn(null);
+
+        $this->expectException(NotFoundException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->me(999);
     }
 
     public function testRegisterCreatesUserAndEnqueuesVerification(): void
