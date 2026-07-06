@@ -36,15 +36,33 @@ final class TokenController extends BaseController
             content: new OA\JsonContent(
                 required: ['email', 'password'],
                 properties: [
-                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'admin@aivance.test'),
-                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'password1234!'),
+                    new OA\Property(property: 'email', type: 'string', format: 'email', description: '가입한 이메일(로그인 ID)', example: 'admin@aivance.test'),
+                    new OA\Property(property: 'password', type: 'string', format: 'password', description: '비밀번호', example: 'password1234!'),
                 ],
             ),
         ),
         tags: ['Auth'],
         responses: [
-            new OA\Response(response: 201, description: '토큰 발급'),
-            new OA\Response(response: 401, description: '자격증명 불일치'),
+            new OA\Response(
+                response: 201,
+                description: '토큰 발급 — data 에 Access/Refresh 토큰 쌍 반환',
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(
+                            property: 'data',
+                            type: 'object',
+                            properties: [
+                                new OA\Property(property: 'access_token', type: 'string', description: '보호 API 호출용 JWT(15분). `Authorization: Bearer <access_token>` 로 사용.'),
+                                new OA\Property(property: 'token_type', type: 'string', example: 'Bearer'),
+                                new OA\Property(property: 'expires_in', type: 'integer', description: 'Access 토큰 만료(초)', example: 900),
+                                new OA\Property(property: 'refresh_token', type: 'string', description: '재발급(회전)·로그아웃에 사용하는 불투명 토큰(14일). 이메일 인증 토큰과 무관.'),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+            new OA\Response(response: 401, description: '자격증명 불일치 (INVALID_CREDENTIALS)'),
         ],
     )]
     public function issue(ServerRequestInterface $request): ResponseInterface
@@ -64,7 +82,13 @@ final class TokenController extends BaseController
             content: new OA\JsonContent(
                 required: ['refresh_token'],
                 properties: [
-                    new OA\Property(property: 'refresh_token', type: 'string'),
+                    new OA\Property(
+                        property: 'refresh_token',
+                        type: 'string',
+                        description: '로그인/재발급 응답으로 받은 **Refresh 토큰**(불투명 문자열). '
+                            . '로그인 Access 토큰(JWT)이 아니며, Authorization 헤더에도 넣지 않습니다.',
+                        example: '3f9a1c8e2b7d…(64자 hex)',
+                    ),
                 ],
             ),
         ),
@@ -90,7 +114,13 @@ final class TokenController extends BaseController
             content: new OA\JsonContent(
                 required: ['refresh_token'],
                 properties: [
-                    new OA\Property(property: 'refresh_token', type: 'string'),
+                    new OA\Property(
+                        property: 'refresh_token',
+                        type: 'string',
+                        description: '로그인/재발급 응답으로 받은 **Refresh 토큰**(불투명 문자열). '
+                            . '로그인 Access 토큰(JWT)이 아니며, Authorization 헤더에도 넣지 않습니다.',
+                        example: '3f9a1c8e2b7d…(64자 hex)',
+                    ),
                 ],
             ),
         ),
