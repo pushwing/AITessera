@@ -1,0 +1,67 @@
+{
+    "name": "aivance/aitessera",
+    "description": "Secure JWT-based authentication & authorization API for the AIvance service suite.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.4",
+        "ext-json": "*",
+        "ext-pdo": "*",
+        "lcobucci/jwt": "^5.4",
+        "nikic/fast-route": "^1.3",
+        "nyholm/psr7": "^1.8",
+        "nyholm/psr7-server": "^1.1",
+        "php-di/php-di": "^7.0",
+        "predis/predis": "^2.2",
+        "psr/container": "^2.0",
+        "psr/http-message": "^1.1",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "relay/relay": "^2.1",
+        "respect/validation": "^2.3",
+        "robmorgan/phinx": "^0.16",
+        "symfony/cache": "^7.1",
+        "symfony/rate-limiter": "^7.1",
+        "vlucas/phpdotenv": "^5.6",
+        "zircote/swagger-php": "^5.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3",
+        "phpstan/phpstan": "^2.0",
+        "friendsofphp/php-cs-fixer": "^3.64"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "scripts": {
+        "serve": "php -S localhost:9300 -t public",
+        "test": "phpunit",
+        "analyse": "phpstan analyse",
+        "cs-fix": "php-cs-fixer fix",
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "check": [
+            "@cs-check",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "scripts-descriptions": {
+        "serve": "개발 서버 — PHP 내장 서버 (localhost:9300, DocumentRoot=public)",
+        "test": "PHPUnit 단독 실행",
+        "analyse": "PHPStan (level 8) 단독 실행",
+        "cs-fix": "PHP-CS-Fixer 자동 정렬",
+        "cs-check": "PHP-CS-Fixer dry-run (커밋 전 검사)",
+        "check": "cs-check + PHPStan + PHPUnit 순차 실행"
+    }
+}

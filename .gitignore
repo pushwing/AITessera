@@ -1,18 +1,27 @@
-*/config/development
-*/logs/log-*.php
-!*/logs/index.html
-*/cache/*
-!system/cache/*
-!*/cache/index.html
-!*/cache/.htaccess
-
-user_guide_src/build/*
-user_guide_src/cilexer/build/*
-user_guide_src/cilexer/dist/*
-user_guide_src/cilexer/pycilexer.egg-info/*
-
-#codeigniter 3
-application/logs/*
-!application/logs/index.html
-!application/logs/.htaccess
+# 의존성
 /vendor/
+
+# 환경변수 · 시크릿 (절대 커밋 금지)
+.env
+.env.testing
+.env.*.local
+
+# 런타임 산출물 (var/) — 디렉토리 구조는 .gitkeep 로 유지, 내용은 커밋 금지
+/var/cache/*
+!/var/cache/.gitkeep
+/var/logs/*.log
+/var/logs/raw/*
+!/var/logs/raw/.gitkeep
+/var/logs/queue-failed/*
+!/var/logs/queue-failed/.gitkeep
+
+# 툴 캐시
+.php-cs-fixer.cache
+.phpunit.cache/
+.phpunit.result.cache
+
+# OS · 에디터
+.DS_Store
+
+# 레거시 (참고용 — 깃 추가 금지)
+/lagacy-source/
