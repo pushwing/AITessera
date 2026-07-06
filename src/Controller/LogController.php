@@ -27,24 +27,11 @@ final class LogController extends BaseController
         path: '/api/v1/logs',
         summary: '클라이언트 로그 수집 (비동기)',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['level', 'message'],
-                properties: [
-                    new OA\Property(property: 'level', type: 'string', enum: LogRequest::LEVELS, example: 'error'),
-                    new OA\Property(property: 'message', type: 'string', example: '결제 요청 실패'),
-                    new OA\Property(property: 'context', type: 'object', additionalProperties: true, nullable: true),
-                    new OA\Property(property: 'source', type: 'string', nullable: true, example: 'web-checkout'),
-                    new OA\Property(property: 'user_id', type: 'integer', nullable: true, example: 42),
-                    new OA\Property(property: 'logged_at', type: 'string', format: 'date-time', nullable: true),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/LogRequest')),
         tags: ['System'],
         responses: [
             new OA\Response(response: 202, description: '큐 적재 완료'),
-            new OA\Response(response: 422, description: '유효성 검사 실패'),
+            new OA\Response(response: 422, description: '유효성 검사 실패 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function store(ServerRequestInterface $request): ResponseInterface

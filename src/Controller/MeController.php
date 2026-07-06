@@ -20,9 +20,24 @@ final class MeController extends BaseController
     #[OA\Get(
         path: '/api/v1/me',
         summary: '현재 로그인 사용자 조회',
+        description: '`Authorization: Bearer <access_token>` 로 인증한다.',
         security: [['bearerAuth' => []]],
         tags: ['Users'],
-        responses: [new OA\Response(response: 200, description: '정상')],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: '정상',
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: 'status', type: 'string', example: 'success'),
+                        new OA\Property(property: 'data', type: 'object', properties: [
+                            new OA\Property(property: 'user_id', type: 'integer', example: 1),
+                        ]),
+                    ],
+                ),
+            ),
+            new OA\Response(response: 401, description: '인증 실패 (UNAUTHORIZED/INVALID_TOKEN/TOKEN_EXPIRED)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+        ],
     )]
     public function show(ServerRequestInterface $request): ResponseInterface
     {

@@ -24,7 +24,7 @@ AITessera 는 **프레임워크 없는 순수 모던 PHP(8.4+)** 로 구성한 R
 | 캐시·큐 | Redis (`predis/predis`) |
 | 입력 검증 | `respect/validation` |
 | 환경변수 | `vlucas/phpdotenv` |
-| API 문서 | `zircote/swagger-php` + Swagger UI (`/api/docs`) |
+| API 문서 | `zircote/swagger-php`(v5) + RapiDoc UI (`/api/docs`, 좌측 API 목록) |
 | 정적 분석 | PHPStan level 8 |
 | 코드 스타일 | PHP-CS-Fixer (PSR-12) |
 | 테스트 | PHPUnit |
@@ -155,7 +155,7 @@ php bin/console <command>   # CLI (migrate·rollback·seed:run)
 public/index.php
   → .env 로딩 → DI 컨테이너 빌드
   → PSR-15 미들웨어 파이프라인 (Relay)
-      [ ErrorHandler → Cors → RateLimit → JwtAuth → RouteDispatch ]
+      [ ErrorHandler → TrailingSlash → Cors → RateLimit → JwtAuth → RouteDispatch ]
   → Controller → Service → Repository(PDO)
   → PSR-7 Response
 ```
@@ -164,6 +164,8 @@ public/index.php
   받는다(존재 노출 차단). `404` 는 인증을 통과한 뒤에만 관측된다.
 - **DB 는 지연 연결**된다(`ConnectionInterface`/`Database`). 검증·인증에서 먼저 실패하는
   요청은 DB 를 연결하지 않는다.
+- **끝 슬래시 정규화** — `TrailingSlashMiddleware` 가 `/api/docs/` 를 `/api/docs` 로 다시 써서
+  끝 슬래시 유무와 무관하게 동작하게 한다.
 
 ### 레이어 책임
 
@@ -182,7 +184,9 @@ public/index.php
 | `src/Middleware/` | PSR-15 미들웨어 |
 | `src/Domain/` | DTO·Enum·도메인 모델 |
 | `src/Exception/` | 도메인 예외 |
-| `src/Support/` | 공용 유틸 (JWT·응답·DB 연결 등) |
+| `src/Support/` | 공용 유틸 (JWT·DB 연결·큐·메일·응답 등) |
+| `src/Console/` | 큐 컨슈머 CLI 워커 (`ProcessMailQueue`·`ProcessLogQueue`) |
+| `src/OpenApi/Schema/` | OpenAPI 재사용 스키마 컴포넌트 |
 | `config/` | 컨테이너·라우트 정의 |
 | `migrations/` | phinx 마이그레이션·시더 |
 | `bin/console` | CLI 진입점 |
@@ -210,7 +214,7 @@ public/index.php
 | `POST` | `/api/v1/tokens/refresh` | — | Refresh 회전 재발급 (200) |
 | `DELETE` | `/api/v1/tokens` | — | 로그아웃 — Refresh 무효화 (204) |
 | `GET` | `/api/v1/me` | ✅ | 현재 로그인 사용자 조회 |
-| `GET` | `/api/docs` | — | Swagger UI (API 문서) |
+| `GET` | `/api/docs` | — | API 문서 UI (RapiDoc, 좌측 API 목록) |
 | `GET` | `/api/v1/openapi.json` | — | OpenAPI 스펙 (JSON) |
 | `POST` | `/api/v1/logs` | — | 클라이언트 로그 수집 (비동기, 202) |
 

@@ -31,38 +31,13 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens',
         summary: '로그인 — 토큰 발급',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['email', 'password'],
-                properties: [
-                    new OA\Property(property: 'email', type: 'string', format: 'email', description: '가입한 이메일(로그인 ID)', example: 'admin@aivance.test'),
-                    new OA\Property(property: 'password', type: 'string', format: 'password', description: '비밀번호', example: 'password1234!'),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/LoginRequest')),
         tags: ['Auth'],
         responses: [
-            new OA\Response(
-                response: 201,
-                description: '토큰 발급 — data 에 Access/Refresh 토큰 쌍 반환',
-                content: new OA\JsonContent(
-                    properties: [
-                        new OA\Property(property: 'status', type: 'string', example: 'success'),
-                        new OA\Property(
-                            property: 'data',
-                            type: 'object',
-                            properties: [
-                                new OA\Property(property: 'access_token', type: 'string', description: '보호 API 호출용 JWT(15분). `Authorization: Bearer <access_token>` 로 사용.'),
-                                new OA\Property(property: 'token_type', type: 'string', example: 'Bearer'),
-                                new OA\Property(property: 'expires_in', type: 'integer', description: 'Access 토큰 만료(초)', example: 900),
-                                new OA\Property(property: 'refresh_token', type: 'string', description: '재발급(회전)·로그아웃에 사용하는 불투명 토큰(14일). 이메일 인증 토큰과 무관.'),
-                            ],
-                        ),
-                    ],
-                ),
-            ),
-            new OA\Response(response: 401, description: '자격증명 불일치 (INVALID_CREDENTIALS)'),
+            new OA\Response(response: 201, description: '토큰 발급 — Access/Refresh 토큰 쌍', content: new OA\JsonContent(ref: '#/components/schemas/TokenResponse')),
+            new OA\Response(response: 401, description: '자격증명 불일치 (INVALID_CREDENTIALS)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 403, description: '이메일 미인증 (EMAIL_NOT_VERIFIED)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 422, description: '유효성 검사 실패 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function issue(ServerRequestInterface $request): ResponseInterface
@@ -77,25 +52,11 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens/refresh',
         summary: 'Refresh 토큰으로 재발급 (회전)',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['refresh_token'],
-                properties: [
-                    new OA\Property(
-                        property: 'refresh_token',
-                        type: 'string',
-                        description: '로그인/재발급 응답으로 받은 **Refresh 토큰**(불투명 문자열). '
-                            . '로그인 Access 토큰(JWT)이 아니며, Authorization 헤더에도 넣지 않습니다.',
-                        example: '3f9a1c8e2b7d…(64자 hex)',
-                    ),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/RefreshTokenRequest')),
         tags: ['Auth'],
         responses: [
-            new OA\Response(response: 200, description: '재발급'),
-            new OA\Response(response: 401, description: '토큰 무효·만료'),
+            new OA\Response(response: 200, description: '재발급 — 새 Access/Refresh 토큰 쌍', content: new OA\JsonContent(ref: '#/components/schemas/TokenResponse')),
+            new OA\Response(response: 401, description: '토큰 무효·만료 (INVALID_TOKEN/TOKEN_EXPIRED)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function refresh(ServerRequestInterface $request): ResponseInterface
@@ -109,23 +70,12 @@ final class TokenController extends BaseController
         path: '/api/v1/tokens',
         summary: '로그아웃 — Refresh 토큰 무효화',
         security: [],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                required: ['refresh_token'],
-                properties: [
-                    new OA\Property(
-                        property: 'refresh_token',
-                        type: 'string',
-                        description: '로그인/재발급 응답으로 받은 **Refresh 토큰**(불투명 문자열). '
-                            . '로그인 Access 토큰(JWT)이 아니며, Authorization 헤더에도 넣지 않습니다.',
-                        example: '3f9a1c8e2b7d…(64자 hex)',
-                    ),
-                ],
-            ),
-        ),
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/RefreshTokenRequest')),
         tags: ['Auth'],
-        responses: [new OA\Response(response: 204, description: '무효화 완료')],
+        responses: [
+            new OA\Response(response: 204, description: '무효화 완료(본문 없음)'),
+            new OA\Response(response: 422, description: 'refresh_token 누락 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+        ],
     )]
     public function revoke(ServerRequestInterface $request): ResponseInterface
     {
