@@ -14,7 +14,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * 운영자 전용 엔드포인트 — 운영자·대행사 계정 생성(이슈 #29).
+ * 운영자 전용 엔드포인트 — 운영자·대행사·일반회원 계정 생성(이슈 #29·#34).
  *
  * `#[RequireRole(UserRole::Operator)]` 로 보호되며, RoleGuardMiddleware 가 운영자 토큰이 아니면
  * 403(FORBIDDEN)으로 차단한다. 생성 계정은 운영자의 소속과 동일해야 하고 이메일 인증은 즉시 완료된다.
@@ -31,8 +31,8 @@ final class OperatorController extends BaseController
     #[RequireRole(UserRole::Operator)]
     #[OA\Post(
         path: '/api/v1/operators',
-        summary: '운영자·대행사 계정 생성',
-        description: '운영자 토큰으로만 호출할 수 있다. 자기 소속과 동일한 운영자(1)·대행사(2) 계정을 생성하며, 이메일 인증은 즉시 완료된다.',
+        summary: '운영자·대행사·일반회원 계정 생성',
+        description: '운영자 토큰으로만 호출할 수 있다. 자기 소속과 동일한 운영자(1)·대행사(2)·일반회원(3) 계정을 생성하며, 이메일 인증은 즉시 완료된다.',
         security: [['bearerAuth' => []]],
         requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/CreateOperatorRequest')),
         tags: ['Users'],

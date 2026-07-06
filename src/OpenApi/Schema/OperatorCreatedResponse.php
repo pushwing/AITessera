@@ -22,7 +22,7 @@ use OpenApi\Attributes as OA;
             properties: [
                 new OA\Property(property: 'id', type: 'integer', example: 2),
                 new OA\Property(property: 'email', type: 'string', format: 'email', example: 'agency@aivance.test'),
-                new OA\Property(property: 'role', type: 'integer', enum: [1, 2], example: 2),
+                new OA\Property(property: 'role', type: 'integer', enum: [1, 2, 3], example: 2),
                 new OA\Property(property: 'email_verified', type: 'boolean', example: true),
             ],
         ),
