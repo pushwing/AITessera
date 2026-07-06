@@ -13,7 +13,7 @@ use OpenApi\Attributes as OA;
  * 공용 보안 스킴(bearerAuth)만 선언한다.
  */
 #[OA\Info(
-    version: '0.1.0',
+    version: '1.0.0',
     title: 'AITessera API',
     description: 'AIvance 제품군을 위한 JWT 기반 인증·인가 API',
 )]
