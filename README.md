@@ -45,8 +45,6 @@ AITessera 는 **프레임워크 없는 순수 모던 PHP(8.4+)** 로 구성한 R
 ```bash
 cp .env.example .env      # 아래 필수 키 설정
 composer install
-php bin/console migrate   # 마이그레이션 실행 (phinx 래퍼)
-composer serve            # 개발 서버 (http://localhost:9300)
 ```
 
 `.env` 필수 키(발췌):
@@ -54,10 +52,12 @@ composer serve            # 개발 서버 (http://localhost:9300)
 ```env
 APP_ENV=local
 DB_HOST=127.0.0.1
+DB_PORT=3306
 DB_NAME=aitessera
 DB_USER=aitessera
-DB_PASS=
+DB_PASS=<DB 비밀번호>
 REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
 JWT_SECRET=<32자 이상 랜덤 문자열>
 JWT_ACCESS_TTL=900        # Access 토큰 15분
 JWT_REFRESH_TTL=1209600   # Refresh 토큰 14일
@@ -65,12 +65,70 @@ JWT_REFRESH_TTL=1209600   # Refresh 토큰 14일
 
 > 시크릿은 **절대 저장소에 커밋하지 않는다.** 운영은 AWS SSM / Secrets Manager 를 사용한다.
 
-### 개발용 테스트 계정
+### Redis 실행
 
-마이그레이션은 시더를 자동 실행하지 않는다. 수동 테스트 계정이 필요하면:
+캐시·레이트리밋·큐에 사용한다. macOS(Homebrew) 기준:
 
 ```bash
-php bin/console seed:run   # admin@aivance.test / password1234!
+brew install redis
+brew services start redis     # 백그라운드 실행 (재부팅 후 자동 시작)
+redis-cli ping                # → PONG (정상)
+
+brew services stop redis      # 중지
+# 서비스로 등록하지 않고 일회성 실행: redis-server
+```
+
+> Linux 는 `sudo systemctl start redis`, Docker 는 `docker run -p 6379:6379 redis:7`.
+
+### MySQL 준비
+
+MySQL 8.0+ 서버가 실행 중이어야 하고, `.env` 의 `DB_*` 계정·DB 가 있어야 한다.
+최초 1회 DB·유저 생성(예):
+
+```sql
+CREATE DATABASE aitessera CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'aitessera'@'localhost' IDENTIFIED BY '<DB_PASS>';
+GRANT ALL PRIVILEGES ON aitessera.* TO 'aitessera'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### 마이그레이션
+
+`migrations/` 의 스키마를 적용한다(phinx 래퍼, 설정은 `phinx.php`).
+
+```bash
+php bin/console migrate    # 대기 중인 마이그레이션 실행
+php bin/console rollback    # 마지막 마이그레이션 롤백
+```
+
+### 시더 · 테스트 계정
+
+배포·마이그레이션은 시더를 **자동 실행하지 않는다.** 개발/수동 테스트용 관리자 계정이 필요하면:
+
+```bash
+php bin/console seed:run   # 재실행 안전 (이미 있으면 건너뜀)
+```
+
+| 항목 | 값 |
+|------|-----|
+| 이메일 | `admin@aivance.test` |
+| 비밀번호 | `password1234!` |
+| 소속 | `aivance` (이메일 인증 완료 · 활성) |
+
+로그인 확인:
+
+```bash
+curl -X POST http://localhost:9300/api/v1/tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@aivance.test","password":"password1234!"}'
+```
+
+### 개발 서버 · 큐 워커
+
+```bash
+composer serve             # http://localhost:9300
+php bin/console mail:work   # 메일 큐 컨슈머 (큐 비우고 종료)
+php bin/console log:work    # 로그 큐 컨슈머 (큐 비우고 종료)
 ```
 
 ---
