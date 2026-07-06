@@ -17,6 +17,7 @@ final readonly class User
         public string $email,
         public string $passwordHash,
         public Affiliation $affiliation,
+        public UserRole $role,
         public bool $isActive,
         public ?DateTimeImmutable $emailVerifiedAt,
     ) {
@@ -32,6 +33,7 @@ final readonly class User
             email: (string) $row['email'],
             passwordHash: (string) $row['password_hash'],
             affiliation: Affiliation::from((string) $row['affiliation']),
+            role: UserRole::from((int) $row['role']),
             isActive: (bool) $row['is_active'],
             emailVerifiedAt: Dates::nullable($row['email_verified_at'] ?? null),
         );

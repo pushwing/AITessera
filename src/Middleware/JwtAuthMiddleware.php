@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Middleware;
 
+use App\Domain\UserRole;
 use App\Exception\InvalidTokenException;
 use App\Exception\TokenExpiredException;
 use App\Exception\UnauthorizedException;
@@ -19,11 +20,12 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 /**
- * `Authorization: Bearer` 토큰을 검증하고 사용자 ID 를 요청 애트리뷰트에 주입한다.
+ * `Authorization: Bearer` 토큰을 검증하고 사용자 ID·회원구분을 요청 애트리뷰트에 주입한다.
  *
  * 검증 제약: 서명(SignedWith, 알고리즘 고정) + 만료(isExpired) 를 모두 확인한다.
  * `alg:none` 우회는 SignedWith 가 서명 알고리즘을 지정된 signer 로 고정함으로써 차단된다.
  *
+ * 주입 애트리뷰트: `userId`(int), `role`(UserRole). `role` 은 인가(RoleGuardMiddleware)의 기준값이다.
  * 공개 경로(PUBLIC_ROUTES)는 검증 없이 통과시킨다.
  */
 final readonly class JwtAuthMiddleware implements MiddlewareInterface
@@ -62,8 +64,10 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
 
-        $userId = $this->authenticate($request);
-        $request = $request->withAttribute('userId', $userId);
+        $auth = $this->authenticate($request);
+        $request = $request
+            ->withAttribute('userId', $auth['userId'])
+            ->withAttribute('role', $auth['role']);
 
         return $handler->handle($request);
     }
@@ -79,7 +83,10 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
         return false;
     }
 
-    private function authenticate(ServerRequestInterface $request): int
+    /**
+     * @return array{userId: int, role: UserRole}
+     */
+    private function authenticate(ServerRequestInterface $request): array
     {
         $header = $request->getHeaderLine('Authorization');
         if (!str_starts_with($header, 'Bearer ')) {
@@ -119,6 +126,12 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
             throw new InvalidTokenException('토큰에 유효한 사용자 식별자가 없습니다.');
         }
 
-        return (int) $sub;
+        $roleClaim = $token->claims()->get('role');
+        $role = is_numeric($roleClaim) ? UserRole::tryFrom((int) $roleClaim) : null;
+        if ($role === null) {
+            throw new InvalidTokenException('토큰에 유효한 회원구분이 없습니다.');
+        }
+
+        return ['userId' => (int) $sub, 'role' => $role];
     }
 }

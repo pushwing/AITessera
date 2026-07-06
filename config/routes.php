@@ -6,6 +6,7 @@ use App\Controller\DocsController;
 use App\Controller\HealthController;
 use App\Controller\LogController;
 use App\Controller\MeController;
+use App\Controller\OperatorController;
 use App\Controller\TokenController;
 use App\Controller\UserController;
 use FastRoute\RouteCollector;
@@ -39,4 +40,7 @@ return static function (RouteCollector $r): void {
 
     // 보호 — 현재 사용자 (JWT 필요)
     $r->addRoute('GET', '/api/v1/me', [MeController::class, 'show']);
+
+    // 보호 — 운영자 전용: 운영자·대행사 계정 생성 (#[RequireRole(Operator)])
+    $r->addRoute('POST', '/api/v1/operators', [OperatorController::class, 'create']);
 };

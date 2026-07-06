@@ -22,6 +22,7 @@ use OpenApi\Attributes as OA;
                 new OA\Property(property: 'email', type: 'string', format: 'email', example: 'admin@aivance.test'),
                 new OA\Property(property: 'name', type: 'string', example: '관리자'),
                 new OA\Property(property: 'affiliation', type: 'string', enum: ['aicura', 'aicopia', 'aicreo', 'aivance', 'ailicet'], example: 'aivance'),
+                new OA\Property(property: 'role', type: 'integer', enum: [1, 2, 3], description: '회원구분 1=운영자 2=대행사 3=일반회원', example: 3),
                 new OA\Property(property: 'contact', type: 'string', example: '010-1234-5678'),
                 new OA\Property(property: 'company', type: 'string', nullable: true, example: 'AIvance'),
                 new OA\Property(property: 'profile', type: 'object', nullable: true, description: '소속별 부가 항목', additionalProperties: true),

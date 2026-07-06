@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Domain\UserRole;
 use DateTimeImmutable;
 use Lcobucci\JWT\Configuration as JwtConfiguration;
 use Psr\Clock\ClockInterface;
@@ -11,7 +12,7 @@ use Psr\Clock\ClockInterface;
 /**
  * 토큰 발급기.
  *
- * - Access Token: JWT(lcobucci, HS256) · 단기 · `sub`(userId) + `aff`(소속) 클레임
+ * - Access Token: JWT(lcobucci, HS256) · 단기 · `sub`(userId) + `aff`(소속) + `role`(회원구분) 클레임
  * - Refresh Token: 암호학적 난수 문자열(불투명) · DB 에는 SHA-256 해시만 저장
  */
 final readonly class JwtIssuer
@@ -23,7 +24,7 @@ final readonly class JwtIssuer
     ) {
     }
 
-    public function issueAccessToken(int $userId, string $affiliation): string
+    public function issueAccessToken(int $userId, string $affiliation, UserRole $role): string
     {
         $now = $this->clock->now();
 
@@ -32,6 +33,7 @@ final readonly class JwtIssuer
             ->expiresAt($now->modify(sprintf('+%d seconds', $this->config->jwtAccessTtl)))
             ->relatedTo((string) $userId)
             ->withClaim('aff', $affiliation)
+            ->withClaim('role', $role->value)
             ->getToken($this->jwtConfig->signer(), $this->jwtConfig->signingKey())
             ->toString();
     }

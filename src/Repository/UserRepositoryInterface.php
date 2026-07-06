@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repository;
 
+use App\Domain\UserRole;
 use DateTimeImmutable;
 
 /**
@@ -46,6 +47,7 @@ interface UserRepositoryInterface
         ?string $company,
         array $profile,
         DateTimeImmutable $agreedAt,
+        UserRole $role = UserRole::Member,
     ): int;
 
     public function markEmailVerified(int $id, DateTimeImmutable $at): void;
