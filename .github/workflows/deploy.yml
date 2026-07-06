@@ -1,0 +1,67 @@
+name: Deploy
+
+# main push(= dev → main 배포 PR 머지) 시 프로덕션 서버로 SSH 자동 배포.
+# 수동 실행(workflow_dispatch)으로 롤백·재배포도 가능하다.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포는 동시에 하나만. 진행 중 배포는 취소하지 않는다(중간 중단 방지).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to production (SSH)
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: 프로덕션 서버 SSH 배포
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          # 첫 실패 명령에서 스크립트 중단(set -e 와 동일 효과)
+          script_stop: true
+          command_timeout: 20m
+          envs: DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            echo "▶ 1) 최신 main 반영"
+            git fetch --prune origin
+            git reset --hard origin/main
+
+            # var/ 는 git 미추적이라 배포마다 없을 수 있다. composer/migrate 이전에
+            # 반드시 만들어 런타임 로그·캐시 경로를 보장한다.
+            echo "▶ 2) 런타임 디렉토리 생성 (composer/migrate 이전)"
+            mkdir -p var/cache var/logs/raw var/logs/queue-failed
+            # 아파치(www-data)가 만든 파일은 배포 계정 소유가 아니라 chmod 가 실패할 수 있다.
+            # best-effort 로 처리하고, 근본 해결은 서버의 setgid(2775) 구성으로 한다.
+            chmod -R g+rwX var 2>/dev/null || echo "  (var chmod 건너뜀 — 소유권 상이. setgid 구성 권장)"
+
+            echo "▶ 3) 운영 의존성 설치"
+            composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+            # 마이그레이션 함정: DB 연결 실패·예외가 나도 CLI 종료코드가 0 일 수 있다.
+            # set -e 로 못 잡으므로 출력을 캡처해 예외 패턴을 직접 검사하고 실패 시 중단한다.
+            echo "▶ 4) 마이그레이션"
+            MIGRATE_OUTPUT="$(php bin/console migrate 2>&1)"
+            echo "$MIGRATE_OUTPUT"
+            if echo "$MIGRATE_OUTPUT" | grep -qiE '\[[A-Za-z0-9_\\]*Exception[^]]*\]|Unable to connect|Access denied|SQLSTATE'; then
+              echo "ERROR: 마이그레이션 실패 감지 — 배포 중단"
+              exit 1
+            fi
+
+            # OPcache 갱신은 아래 아파치 reload 로 처리한다(무중단). Redis 애플리케이션 캐시는
+            # 큐·레이트리밋 상태를 공유하므로 배포 시 일괄 flush 하지 않는다(TTL 로 자연 갱신).
+            echo "▶ 5) 아파치 reload (OPcache 갱신, 무중단)"
+            sudo -n systemctl reload apache2
+
+            echo "✅ 배포 완료: $(git rev-parse --short HEAD)"
