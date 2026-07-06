@@ -69,8 +69,9 @@ final readonly class UserRepository implements UserRepositoryInterface
                  terms_agreed_at, third_party_agreed_at, created_at)
              VALUES
                 (:email, :password_hash, :affiliation, :name, :contact, :company, :profile,
-                 :agreed_at, :agreed_at, :created_at)',
+                 :terms_agreed_at, :third_party_agreed_at, :created_at)',
         );
+        $timestamp = $agreedAt->format('Y-m-d H:i:s');
         $stmt->execute([
             'email' => $email,
             'password_hash' => $passwordHash,
@@ -79,8 +80,9 @@ final readonly class UserRepository implements UserRepositoryInterface
             'contact' => $contact,
             'company' => $company,
             'profile' => $profile === [] ? null : json_encode($profile, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
-            'agreed_at' => $agreedAt->format('Y-m-d H:i:s'),
-            'created_at' => $agreedAt->format('Y-m-d H:i:s'),
+            'terms_agreed_at' => $timestamp,
+            'third_party_agreed_at' => $timestamp,
+            'created_at' => $timestamp,
         ]);
 
         return (int) $this->db->pdo()->lastInsertId();
@@ -89,10 +91,12 @@ final readonly class UserRepository implements UserRepositoryInterface
     public function markEmailVerified(int $id, DateTimeImmutable $at): void
     {
         $stmt = $this->db->pdo()->prepare(
-            'UPDATE users SET email_verified_at = :at, updated_at = :at WHERE id = :id',
+            'UPDATE users SET email_verified_at = :at, updated_at = :updated_at WHERE id = :id',
         );
+        $timestamp = $at->format('Y-m-d H:i:s');
         $stmt->execute([
-            'at' => $at->format('Y-m-d H:i:s'),
+            'at' => $timestamp,
+            'updated_at' => $timestamp,
             'id' => $id,
         ]);
     }
@@ -100,10 +104,12 @@ final readonly class UserRepository implements UserRepositoryInterface
     public function updateLastLogin(int $id, DateTimeImmutable $at): void
     {
         $stmt = $this->db->pdo()->prepare(
-            'UPDATE users SET last_login_at = :at, updated_at = :at WHERE id = :id',
+            'UPDATE users SET last_login_at = :at, updated_at = :updated_at WHERE id = :id',
         );
+        $timestamp = $at->format('Y-m-d H:i:s');
         $stmt->execute([
-            'at' => $at->format('Y-m-d H:i:s'),
+            'at' => $timestamp,
+            'updated_at' => $timestamp,
             'id' => $id,
         ]);
     }
