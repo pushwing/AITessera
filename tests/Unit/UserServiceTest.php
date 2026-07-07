@@ -7,13 +7,16 @@ namespace Tests\Unit;
 use App\Domain\Affiliation;
 use App\Domain\Request\CreateOperatorRequest;
 use App\Domain\Request\RegisterRequest;
+use App\Domain\Request\UpdateMeRequest;
 use App\Domain\UserRole;
 use App\Exception\AlreadyExistsException;
 use App\Exception\ForbiddenException;
+use App\Exception\InvalidCredentialsException;
 use App\Exception\InvalidTokenException;
 use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
 use App\Repository\EmailVerificationRepositoryInterface;
+use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepositoryInterface;
 use App\Service\UserService;
 use App\Support\Config;
@@ -84,6 +87,106 @@ final class UserServiceTest extends TestCase
         $this->expectException(NotFoundException::class);
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
             ->me(999);
+    }
+
+    public function testUpdateMeChangesProfileFieldsAndReturnsFreshProfile(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(42)->willReturn($this->userRow(['id' => 42]));
+        $users->expects(self::once())->method('updateFields')
+            ->with(42, self::callback(
+                static fn (array $f): bool => $f['name'] === '새이름' && $f['contact'] === '010-9999-8888',
+            ));
+        $users->expects(self::never())->method('updatePassword');
+        // 수정 후 최신 프로필 조회
+        $users->method('findProfileById')->with(42)->willReturn($this->profileRow(['id' => 42, 'name' => '새이름']));
+
+        $profile = $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->updateMe(UpdateMeRequest::fromArray(['name' => '새이름', 'contact' => '010-9999-8888']), 42);
+
+        self::assertSame('새이름', $profile->name);
+    }
+
+    public function testUpdateMeChangesPasswordWhenCurrentMatches(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(42)->willReturn(
+            $this->userRow(['id' => 42, 'password_hash' => password_hash('Old!Passw0rd', PASSWORD_ARGON2ID)]),
+        );
+        $users->expects(self::once())->method('updatePassword')->with(42);
+        $users->method('findProfileById')->willReturn($this->profileRow(['id' => 42]));
+
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->updateMe(UpdateMeRequest::fromArray([
+                'password' => 'New!Passw0rd1',
+                'current_password' => 'Old!Passw0rd',
+            ]), 42);
+    }
+
+    public function testUpdateMeRejectsWrongCurrentPassword(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(42)->willReturn(
+            $this->userRow(['id' => 42, 'password_hash' => password_hash('Old!Passw0rd', PASSWORD_ARGON2ID)]),
+        );
+        $users->expects(self::never())->method('updatePassword');
+        $users->expects(self::never())->method('updateFields');
+
+        $this->expectException(InvalidCredentialsException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->updateMe(UpdateMeRequest::fromArray([
+                'password' => 'New!Passw0rd1',
+                'current_password' => 'Wr0ng!Passw0rd',
+            ]), 42);
+    }
+
+    public function testUpdateMeThrowsNotFoundForUnknownUser(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->willReturn(null);
+
+        $this->expectException(NotFoundException::class);
+        $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $this->createMock(QueueInterface::class))
+            ->updateMe(UpdateMeRequest::fromArray(['name' => '홍길동']), 999);
+    }
+
+    public function testWithdrawSoftDeletesAndRevokesAllTokens(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(42)->willReturn(
+            $this->userRow(['id' => 42, 'password_hash' => password_hash('My!Passw0rd', PASSWORD_ARGON2ID)]),
+        );
+        $users->expects(self::once())->method('softDelete')->with(42);
+
+        $refreshTokens = $this->createMock(RefreshTokenRepositoryInterface::class);
+        $refreshTokens->expects(self::once())->method('revokeAllForUser')->with(42);
+
+        $this->service(
+            $users,
+            $this->createMock(EmailVerificationRepositoryInterface::class),
+            $this->createMock(QueueInterface::class),
+            $refreshTokens,
+        )->withdraw(42, 'My!Passw0rd');
+    }
+
+    public function testWithdrawRejectsWrongPassword(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findById')->with(42)->willReturn(
+            $this->userRow(['id' => 42, 'password_hash' => password_hash('My!Passw0rd', PASSWORD_ARGON2ID)]),
+        );
+        $users->expects(self::never())->method('softDelete');
+
+        $refreshTokens = $this->createMock(RefreshTokenRepositoryInterface::class);
+        $refreshTokens->expects(self::never())->method('revokeAllForUser');
+
+        $this->expectException(InvalidCredentialsException::class);
+        $this->service(
+            $users,
+            $this->createMock(EmailVerificationRepositoryInterface::class),
+            $this->createMock(QueueInterface::class),
+            $refreshTokens,
+        )->withdraw(42, 'Wr0ng!Passw0rd');
     }
 
     public function testRegisterCreatesUserAndEnqueuesVerification(): void
@@ -293,11 +396,20 @@ final class UserServiceTest extends TestCase
         UserRepositoryInterface $users,
         EmailVerificationRepositoryInterface $verifications,
         QueueInterface $queue,
+        ?RefreshTokenRepositoryInterface $refreshTokens = null,
     ): UserService {
         $db = $this->createMock(ConnectionInterface::class);
         $db->method('transaction')->willReturnCallback(static fn (callable $work): mixed => $work());
 
-        return new UserService($users, $verifications, $queue, $this->config, $this->clock, $db);
+        return new UserService(
+            $users,
+            $verifications,
+            $refreshTokens ?? $this->createMock(RefreshTokenRepositoryInterface::class),
+            $queue,
+            $this->config,
+            $this->clock,
+            $db,
+        );
     }
 
     private function registerRequest(): RegisterRequest
@@ -342,6 +454,29 @@ final class UserServiceTest extends TestCase
             'role' => 3,
             'is_active' => 1,
             'email_verified_at' => null,
+        ], $overrides);
+    }
+
+    /**
+     * findProfileById 반환 형태(민감정보 제외 컬럼셋).
+     *
+     * @param array<string, mixed> $overrides
+     *
+     * @return array<string, mixed>
+     */
+    private function profileRow(array $overrides = []): array
+    {
+        return array_merge([
+            'id' => 100,
+            'email' => 'user@aivance.test',
+            'name' => '홍길동',
+            'affiliation' => 'aivance',
+            'role' => 3,
+            'contact' => '010-1234-5678',
+            'company' => 'AIvance',
+            'profile' => null,
+            'email_verified_at' => '2026-07-01 00:00:00',
+            'created_at' => '2026-07-01 09:00:00',
         ], $overrides);
     }
 }

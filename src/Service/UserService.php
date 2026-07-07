@@ -5,17 +5,22 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Domain\EmailVerification;
+use App\Domain\ProfileSchema;
 use App\Domain\Request\CreateOperatorRequest;
 use App\Domain\Request\RegisterRequest;
+use App\Domain\Request\UpdateMeRequest;
 use App\Domain\User;
 use App\Domain\UserProfile;
 use App\Domain\UserRole;
 use App\Exception\AlreadyExistsException;
 use App\Exception\ForbiddenException;
+use App\Exception\InvalidCredentialsException;
 use App\Exception\InvalidTokenException;
 use App\Exception\NotFoundException;
 use App\Exception\TokenExpiredException;
+use App\Exception\ValidationException;
 use App\Repository\EmailVerificationRepositoryInterface;
+use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepositoryInterface;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
@@ -35,6 +40,7 @@ final readonly class UserService
     public function __construct(
         private UserRepositoryInterface $users,
         private EmailVerificationRepositoryInterface $verifications,
+        private RefreshTokenRepositoryInterface $refreshTokens,
         private QueueInterface $queue,
         private Config $config,
         private ClockInterface $clock,
@@ -53,6 +59,102 @@ final readonly class UserService
         }
 
         return UserProfile::fromRow($row);
+    }
+
+    /**
+     * 본인 정보 수정(부분 수정) — 이름·연락처·회사·프로필·비밀번호를 변경한다(이슈 #39).
+     *
+     * 비밀번호를 바꿀 때는 현재 비밀번호가 일치해야 한다(탈취 토큰에 의한 무단 변경 방지).
+     * 수정 후 최신 프로필을 반환한다.
+     */
+    public function updateMe(UpdateMeRequest $request, int $userId): UserProfile
+    {
+        $row = $this->users->findById($userId);
+        if ($row === null) {
+            throw new NotFoundException('사용자를 찾을 수 없습니다.');
+        }
+        $user = User::fromRow($row);
+
+        // 비밀번호 변경 시 현재 비밀번호 검증.
+        if ($request->password !== null) {
+            if ($request->currentPassword === null
+                || !password_verify($request->currentPassword, $user->passwordHash)) {
+                throw new InvalidCredentialsException('현재 비밀번호가 일치하지 않습니다.');
+            }
+        }
+
+        $fields = $this->buildProfileFields($request, $user);
+
+        $now = $this->clock->now();
+        $password = $request->password;
+        $this->db->transaction(function () use ($userId, $fields, $password, $now): void {
+            if ($fields !== []) {
+                $this->users->updateFields($userId, $fields, $now);
+            }
+            if ($password !== null) {
+                $this->users->updatePassword($userId, password_hash($password, PASSWORD_ARGON2ID), $now);
+            }
+        });
+
+        return $this->me($userId);
+    }
+
+    /**
+     * 회원 탈퇴 — 비밀번호로 본인 확인 후 소프트 삭제하고 모든 세션을 무효화한다(이슈 #39).
+     *
+     * 소프트 삭제(deleted_at) + 비활성화 + Refresh 토큰 전체 폐기를 하나의 트랜잭션으로 처리한다.
+     * 탈퇴 후에는 기존에 발급된 Access 토큰이 만료(≤15분)로 자연 소멸하며, 재로그인·재발급은 불가하다.
+     */
+    public function withdraw(int $userId, string $password): void
+    {
+        $row = $this->users->findById($userId);
+        if ($row === null) {
+            throw new NotFoundException('사용자를 찾을 수 없습니다.');
+        }
+        $user = User::fromRow($row);
+
+        if (!password_verify($password, $user->passwordHash)) {
+            throw new InvalidCredentialsException('비밀번호가 일치하지 않습니다.');
+        }
+
+        $now = $this->clock->now();
+        $this->db->transaction(function () use ($userId, $now): void {
+            $this->users->softDelete($userId, $now);
+            $this->refreshTokens->revokeAllForUser($userId, $now);
+        });
+    }
+
+    /**
+     * 본인 수정 요청에서 제공된 프로필 컬럼만 조립한다(비밀번호는 별도 처리).
+     *
+     * profile 은 본인 소속(affiliation) 스키마로 검증한다.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildProfileFields(UpdateMeRequest $request, User $user): array
+    {
+        $fields = [];
+
+        if ($request->name !== null) {
+            $fields['name'] = $request->name;
+        }
+        if ($request->contact !== null) {
+            $fields['contact'] = $request->contact;
+        }
+        if ($request->has('company')) {
+            $fields['company'] = $request->company;
+        }
+        if ($request->has('profile')) {
+            $errors = ProfileSchema::validate($user->affiliation, $request->profile);
+            if ($errors !== []) {
+                throw new ValidationException($errors);
+            }
+            $fields['profile'] = $request->profile === []
+                ? null
+                : json_encode($request->profile, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        }
+
+        return $fields;
     }
 
     /**
