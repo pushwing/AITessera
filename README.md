@@ -58,12 +58,15 @@ DB_USER=aitessera
 DB_PASS=<DB 비밀번호>
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
-JWT_SECRET=<32자 이상 랜덤 문자열>
+JWT_ALGO=HS256            # 서명 알고리즘: HS256(대칭키) 또는 RS256(비대칭키)
+JWT_SECRET=<32자 이상 랜덤 문자열>   # HS256 사용 시 필수
 JWT_ACCESS_TTL=900        # Access 토큰 15분
 JWT_REFRESH_TTL=1209600   # Refresh 토큰 14일
 ```
 
 > 시크릿은 **절대 저장소에 커밋하지 않는다.** 운영은 AWS SSM / Secrets Manager 를 사용한다.
+>
+> RS256(비대칭키)으로 전환하려면 아래 [JWT 서명 키](#jwt-서명-키-rs256) 를 참고한다.
 
 ### Redis 실행
 
@@ -123,6 +126,32 @@ curl -X POST http://localhost:9300/api/v1/tokens \
   -d '{"email":"admin@aivance.test","password":"password1234!"}'
 ```
 
+### JWT 서명 키 (RS256)
+
+기본 서명 알고리즘은 **HS256**(대칭키)이며 `JWT_SECRET` 하나로 서명·검증한다.
+발급자(개인키)와 검증자(공개키)를 분리하려면 **RS256**(비대칭키)으로 전환한다.
+
+RSA 키페어를 생성한다(기본 `var/keys/` 에 생성 · 개인키는 자동으로 `0600` 권한):
+
+```bash
+php bin/console jwt:keygen           # var/keys/jwt_{private,public}.pem 생성
+php bin/console jwt:keygen --force    # 기존 키가 있어도 덮어쓰기
+```
+
+생성 후 안내된 값을 `.env` 에 설정한다:
+
+```env
+JWT_ALGO=RS256
+JWT_PRIVATE_KEY_PATH=var/keys/jwt_private.pem   # 서명(발급)용 개인키
+JWT_PUBLIC_KEY_PATH=var/keys/jwt_public.pem     # 검증용 공개키
+# JWT_PRIVATE_KEY_PASSPHRASE=                    # 개인키에 암호가 걸려 있을 때만
+```
+
+> - **개인키는 절대 커밋하지 않는다.** `var/keys/` · `*.pem` 은 `.gitignore` 로 차단되어 있다.
+> - 운영은 키페어를 저장소가 아니라 **AWS SSM Parameter Store / Secrets Manager** 로 배치하고 경로만 지정한다.
+> - `JWT_ALGO=RS256` 인데 키 파일을 읽을 수 없으면 **부팅 시 즉시 실패**(fail-fast)한다.
+> - Access 토큰은 15분 단기라 HS256↔RS256 전환 시 기존 토큰 영향이 거의 없다.
+
 ### 개발 서버 · 큐 워커
 
 ```bash
@@ -142,7 +171,7 @@ composer analyse    # PHPStan (level 8)
 composer cs-fix     # PHP-CS-Fixer 자동 정렬
 composer cs-check   # PHP-CS-Fixer dry-run
 composer check      # cs-check + analyse + test 순차 실행
-php bin/console <command>   # CLI (migrate·rollback·seed:run)
+php bin/console <command>   # CLI (migrate·rollback·seed:run·jwt:keygen·mail:work·log:work)
 ```
 
 ---
@@ -247,7 +276,9 @@ curl -X POST http://localhost:9300/api/v1/tokens \
 - **회전(rotation)** — Refresh 사용 시 이전 토큰 폐기 + 새 토큰 발급(트랜잭션)
 - **재사용 감지** — 이미 폐기된 Refresh 토큰이 다시 제시되면 탈취로 간주하고
   해당 사용자의 **모든 토큰을 무효화**
-- 알고리즘 HS256 고정(`alg:none` 우회 차단), 비밀번호 `password_hash()`(Argon2id)
+- 서명 알고리즘 **HS256(기본)/RS256 선택**(`JWT_ALGO`) · 검증 시 알고리즘 고정으로 `alg:none` 우회 차단
+  — RS256 설정은 [JWT 서명 키](#jwt-서명-키-rs256) 참고
+- 비밀번호 `password_hash()`(Argon2id)
 
 ### 에러 코드
 
