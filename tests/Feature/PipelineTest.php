@@ -124,6 +124,19 @@ final class PipelineTest extends TestCase
         self::assertStringContainsString('rapi-doc', (string) $response->getBody());
     }
 
+    public function testJwksEndpointsArePublicAndReturnEmptySetUnderHs256(): void
+    {
+        // HS256(이 테스트의 알고리즘)에서는 공개할 비대칭키가 없다 — 시크릿을 노출하지 않고
+        // 빈 키셋(200)을 반환한다. 표준 경로·버전 경로 모두 인증 없이 접근 가능해야 한다.
+        foreach (['/.well-known/jwks.json', '/api/v1/jwks.json'] as $path) {
+            $response = $this->handle('GET', $path);
+
+            self::assertSame(200, $response->getStatusCode(), $path);
+            self::assertStringContainsString('application/jwk-set+json', $response->getHeaderLine('Content-Type'));
+            self::assertSame(['keys' => []], $this->decode($response), $path);
+        }
+    }
+
     public function testTrailingSlashIsNormalized(): void
     {
         // '/api/docs/' 도 '/api/docs' 처럼 동작해야 한다(공개 매칭·라우팅 일관).

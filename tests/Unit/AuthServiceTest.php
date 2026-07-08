@@ -15,6 +15,7 @@ use App\Repository\UserRepositoryInterface;
 use App\Service\AuthService;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
+use App\Support\Jwks;
 use App\Support\JwtIssuer;
 use DateTimeImmutable;
 use Lcobucci\JWT\Configuration;
@@ -53,7 +54,7 @@ final class AuthServiceTest extends TestCase
             appBaseUrl: 'http://localhost:9300/',
         );
         $jwtConfig = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
-        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);
+        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock, new Jwks($config));
     }
 
     public function testLoginIssuesTokenPairAndUpdatesLastLogin(): void

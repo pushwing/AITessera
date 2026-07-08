@@ -152,6 +152,25 @@ JWT_PUBLIC_KEY_PATH=var/keys/jwt_public.pem     # 검증용 공개키
 > - `JWT_ALGO=RS256` 인데 키 파일을 읽을 수 없으면 **부팅 시 즉시 실패**(fail-fast)한다.
 > - Access 토큰은 15분 단기라 HS256↔RS256 전환 시 기존 토큰 영향이 거의 없다.
 
+#### JWKS — 공개키 자동 확인 (외부 검증자용)
+
+RS256 공개키를 외부 서비스가 **자동으로 내려받아 검증**할 수 있도록 JWKS(JSON Web Key
+Set · RFC 7517) 엔드포인트를 제공한다. 공개키 파일을 수동 배포할 필요가 없다.
+
+```bash
+curl http://localhost:9300/.well-known/jwks.json   # 표준 well-known 경로
+curl http://localhost:9300/api/v1/jwks.json         # 버전 경로 별칭 (동일 응답)
+```
+
+```json
+{ "keys": [ { "kty": "RSA", "use": "sig", "alg": "RS256", "kid": "…", "n": "…", "e": "AQAB" } ] }
+```
+
+> - 발급 토큰 헤더에는 공개키에서 파생한 `kid`(RFC 7638 thumbprint)가 실려, 소비자가 JWKS 의
+>   여러 키 중 검증 키를 매칭·회전할 수 있다.
+> - **HS256(대칭키)에서는 시크릿을 절대 노출하지 않고 빈 키셋(`{"keys":[]}`)을 반환**한다.
+> - 응답은 `application/jwk-set+json` · `Cache-Control: public, max-age=3600` 로 캐시 가능하다.
+
 ### 개발 서버 · 큐 워커
 
 ```bash

@@ -7,6 +7,7 @@ namespace Tests\Unit;
 use App\Domain\JwtAlgorithm;
 use App\Domain\UserRole;
 use App\Support\Config;
+use App\Support\Jwks;
 use App\Support\JwtIssuer;
 use App\Support\JwtKeyGenerator;
 use DateTimeImmutable;
@@ -86,8 +87,10 @@ final class JwtRs256RoundTripTest extends TestCase
     public function testAccessTokenIsSignedWithRs256AndVerifiesWithPublicKey(): void
     {
         $clock = new FixedClock(new DateTimeImmutable('2026-07-05 12:00:00'));
+        $config = $this->config();
         $jwtConfig = $this->asymmetricConfiguration();
-        $issuer = new JwtIssuer($jwtConfig, $this->config(), $clock);
+        $jwks = new Jwks($config);
+        $issuer = new JwtIssuer($jwtConfig, $config, $clock, $jwks);
 
         $jwt = $issuer->issueAccessToken(42, 'aivance', UserRole::Operator);
 
@@ -96,6 +99,10 @@ final class JwtRs256RoundTripTest extends TestCase
 
         // 토큰 헤더의 알고리즘이 RS256 으로 고정되었는지 확인.
         self::assertSame('RS256', $token->headers()->get('alg'));
+
+        // 토큰 헤더의 kid 가 JWKS 로 노출되는 공개키의 kid 와 일치해야 한다(소비자 키 매칭).
+        self::assertSame($jwks->signingKid(), $token->headers()->get('kid'));
+        self::assertNotNull($token->headers()->get('kid'));
 
         // 공개키로 서명 검증이 통과해야 한다.
         $jwtConfig->validator()->assert(
@@ -124,7 +131,7 @@ final class JwtRs256RoundTripTest extends TestCase
                 InMemory::file($foreignPrivate),
                 InMemory::file($foreignPublic),
             );
-            $foreignIssuer = new JwtIssuer($foreignConfig, $this->config(), $clock);
+            $foreignIssuer = new JwtIssuer($foreignConfig, $this->config(), $clock, new Jwks($this->config()));
             $jwt = $foreignIssuer->issueAccessToken(42, 'aivance', UserRole::Operator);
 
             $jwtConfig = $this->asymmetricConfiguration();

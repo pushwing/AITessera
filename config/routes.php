@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controller\AdminUserController;
 use App\Controller\DocsController;
 use App\Controller\HealthController;
+use App\Controller\JwksController;
 use App\Controller\LogController;
 use App\Controller\MeController;
 use App\Controller\OperatorController;
@@ -25,6 +26,10 @@ return static function (RouteCollector $r): void {
     // 공개 — API 문서 (Swagger UI + OpenAPI 스펙)
     $r->addRoute('GET', '/api/docs', [DocsController::class, 'ui']);
     $r->addRoute('GET', '/api/v1/openapi.json', [DocsController::class, 'spec']);
+
+    // 공개 — JWKS (RS256 공개키 자동 확인): 표준 well-known 경로 + 버전 경로 별칭
+    $r->addRoute('GET', '/.well-known/jwks.json', [JwksController::class, 'wellKnown']);
+    $r->addRoute('GET', '/api/v1/jwks.json', [JwksController::class, 'versioned']);
 
     // 공개 — 인증 토큰
     $r->addRoute('POST', '/api/v1/tokens', [TokenController::class, 'issue']);
