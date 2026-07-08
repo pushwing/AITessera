@@ -9,6 +9,7 @@ declare(strict_types=1);
 use App\Console\ProcessLogQueue;
 use App\Console\ProcessMailQueue;
 use App\Support\ContainerFactory;
+use App\Support\JwtKeyGenerator;
 use Dotenv\Dotenv;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
@@ -40,6 +41,41 @@ $usage = static function (): int {
       seed:run    시더 실행
       mail:work   메일 큐 컨슈머 (큐를 비우고 종료)
       log:work    로그 큐 컨슈머 (큐를 비우고 종료)
+      jwt:keygen  RS256 서명용 RSA 키페어 생성 (--force 로 덮어쓰기)
+
+    TXT);
+
+    return 0;
+};
+
+$jwtKeygen = static function (array $argv): int {
+    // 저장 경로는 .env 의 JWT_PRIVATE_KEY_PATH·JWT_PUBLIC_KEY_PATH 를 우선 사용하고, 없으면 var/keys 기본값.
+    $root = dirname(__DIR__);
+    $privatePath = ($_ENV['JWT_PRIVATE_KEY_PATH'] ?? '') ?: $root . '/var/keys/jwt_private.pem';
+    $publicPath  = ($_ENV['JWT_PUBLIC_KEY_PATH'] ?? '') ?: $root . '/var/keys/jwt_public.pem';
+    $force = in_array('--force', $argv, true);
+
+    try {
+        $generator = ContainerFactory::build()->get(JwtKeyGenerator::class);
+        assert($generator instanceof JwtKeyGenerator);
+        $result = $generator->generate($privatePath, $publicPath, force: $force);
+    } catch (Throwable $e) {
+        fwrite(STDERR, "키 생성 실패: {$e->getMessage()}\n");
+
+        return 1;
+    }
+
+    fwrite(STDOUT, <<<TXT
+    RSA 키페어 생성 완료 ({$result['bits']} 비트)
+      개인키: {$result['privateKeyPath']}
+      공개키: {$result['publicKeyPath']}
+
+    .env 에 아래를 설정하세요:
+      JWT_ALGO=RS256
+      JWT_PRIVATE_KEY_PATH={$result['privateKeyPath']}
+      JWT_PUBLIC_KEY_PATH={$result['publicKeyPath']}
+
+    ⚠ 개인키는 절대 커밋하지 마세요. 운영은 SSM/Secrets Manager 로 배치하세요.
 
     TXT);
 
@@ -70,6 +106,7 @@ $exitCode = match ($command) {
     'seed:run'         => $runPhinx(['seed:run']),
     'mail:work'        => $mailWork(),
     'log:work'         => $logWork(),
+    'jwt:keygen'       => $jwtKeygen($argv),
     'list', '--help', '-h' => $usage(),
     default            => (static function (string $c): int {
         fwrite(STDERR, "알 수 없는 커맨드: {$c}\n실행 가능한 커맨드는 `php bin/console list` 로 확인하세요.\n");

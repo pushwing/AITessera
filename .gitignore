@@ -6,6 +6,10 @@
 .env.testing
 .env.*.local
 
+# JWT 서명 키 (RS256 개인/공개키 — 절대 커밋 금지)
+/var/keys/
+*.pem
+
 # 런타임 산출물 (var/) — 디렉토리 구조는 .gitkeep 로 유지, 내용은 커밋 금지
 /var/cache/*
 !/var/cache/.gitkeep

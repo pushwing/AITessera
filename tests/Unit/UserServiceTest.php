@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Domain\Affiliation;
+use App\Domain\JwtAlgorithm;
 use App\Domain\Request\CreateOperatorRequest;
 use App\Domain\Request\RegisterRequest;
 use App\Domain\Request\UpdateMeRequest;
@@ -45,7 +46,7 @@ final class UserServiceTest extends TestCase
             redisHost: '',
             redisPort: 6379,
             jwtSecret: 'test_secret_key_at_least_32_characters_long_xx',
-            jwtAlgo: 'HS256',
+            jwtAlgo: JwtAlgorithm::HS256,
             jwtAccessTtl: 900,
             jwtRefreshTtl: 1209600,
             emailVerifyTtl: 86400,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Domain\JwtAlgorithm;
 use App\Domain\UserRole;
 use App\Support\Config;
 use App\Support\JwtIssuer;
@@ -36,7 +37,7 @@ final class JwtIssuerTest extends TestCase
             redisHost: '',
             redisPort: 6379,
             jwtSecret: self::JWT_SECRET,
-            jwtAlgo: 'HS256',
+            jwtAlgo: JwtAlgorithm::HS256,
             jwtAccessTtl: 900,
             jwtRefreshTtl: 1209600,
             emailVerifyTtl: 86400,
