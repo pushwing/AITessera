@@ -33,6 +33,9 @@ final class PipelineTest extends TestCase
         $_ENV['APP_ENV'] = 'testing';
         $_ENV['APP_DEBUG'] = 'true';
         $_ENV['JWT_SECRET'] = self::JWT_SECRET;
+        // 이 테스트는 HS256(대칭키)로 토큰을 직접 서명한다. 선행 테스트가 로컬 .env 의
+        // JWT_ALGO=RS256 을 $_ENV 에 남길 수 있으므로 HS256 으로 명시 고정해 격리한다.
+        $_ENV['JWT_ALGO'] = 'HS256';
 
         $this->container = ContainerFactory::build();
     }
@@ -225,6 +228,8 @@ final class PipelineTest extends TestCase
 
         return $config->builder()
             ->issuedAt($now)
+            // 실제 발급기(JwtIssuer)와 동일하게 nbf 를 설정 — StrictValidAt 이 nbf 존재를 요구한다.
+            ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify(sprintf('%+d seconds', $expiresInSeconds)))
             ->relatedTo((string) $userId)
             ->withClaim('aff', 'aivance')

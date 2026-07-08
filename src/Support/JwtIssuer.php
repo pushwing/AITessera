@@ -31,6 +31,8 @@ final readonly class JwtIssuer
 
         return $this->jwtConfig->builder()
             ->issuedAt($now)
+            // nbf(not-before) 를 발급 시각으로 설정 — 검증 측 StrictValidAt 이 iat·nbf·exp 존재를 모두 요구한다.
+            ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify(sprintf('+%d seconds', $this->config->jwtAccessTtl)))
             ->relatedTo((string) $userId)
             ->withClaim('aff', $affiliation)
