@@ -39,8 +39,10 @@ return static function (RouteCollector $r): void {
     // 공개 — 클라이언트 로그 수집 (비동기 큐 적재)
     $r->addRoute('POST', '/api/v1/logs', [LogController::class, 'store']);
 
-    // 보호 — 현재 사용자 (JWT 필요)
+    // 보호 — 현재 사용자 (JWT 필요): 조회·본인 수정·탈퇴
     $r->addRoute('GET', '/api/v1/me', [MeController::class, 'show']);
+    $r->addRoute('PATCH', '/api/v1/me', [MeController::class, 'update']);
+    $r->addRoute('DELETE', '/api/v1/me', [MeController::class, 'destroy']);
 
     // 보호 — 운영자 전용: 운영자·대행사·일반회원 계정 생성 (#[RequireRole(Operator)])
     $r->addRoute('POST', '/api/v1/operators', [OperatorController::class, 'create']);

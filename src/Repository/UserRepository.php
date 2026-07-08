@@ -71,7 +71,10 @@ final readonly class UserRepository implements UserRepositoryInterface
 
     public function emailExists(string $email): bool
     {
-        $stmt = $this->db->pdo()->prepare('SELECT 1 FROM users WHERE email = :email LIMIT 1');
+        // 탈퇴(소프트 삭제)한 회원의 이메일은 점유로 보지 않는다 → 동일 이메일 재가입 허용(이슈 #39).
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT 1 FROM users WHERE email = :email AND deleted_at IS NULL LIMIT 1',
+        );
         $stmt->execute(['email' => $email]);
 
         return $stmt->fetchColumn() !== false;
@@ -234,6 +237,21 @@ final readonly class UserRepository implements UserRepositoryInterface
         $timestamp = $at->format('Y-m-d H:i:s');
         $stmt->execute([
             'password_hash' => $passwordHash,
+            'updated_at' => $timestamp,
+            'id' => $id,
+        ]);
+    }
+
+    public function softDelete(int $id, DateTimeImmutable $at): void
+    {
+        // 소프트 삭제 + 비활성화(이슈 #39). 이후 모든 조회의 deleted_at IS NULL 필터에서 제외된다.
+        $stmt = $this->db->pdo()->prepare(
+            'UPDATE users SET deleted_at = :at, is_active = 0, updated_at = :updated_at
+             WHERE id = :id AND deleted_at IS NULL',
+        );
+        $timestamp = $at->format('Y-m-d H:i:s');
+        $stmt->execute([
+            'at' => $timestamp,
             'updated_at' => $timestamp,
             'id' => $id,
         ]);

@@ -98,7 +98,12 @@ interface UserRepositoryInterface
     public function updateFields(int $id, array $fields, DateTimeImmutable $at): void;
 
     /**
-     * 회원 비밀번호 해시를 교체한다(운영자에 의한 재설정).
+     * 회원 비밀번호 해시를 교체한다(운영자에 의한 재설정 또는 본인 변경).
      */
     public function updatePassword(int $id, string $passwordHash, DateTimeImmutable $at): void;
+
+    /**
+     * 회원을 소프트 삭제(탈퇴)한다 — deleted_at 설정 + 비활성화(이슈 #39).
+     */
+    public function softDelete(int $id, DateTimeImmutable $at): void;
 }
