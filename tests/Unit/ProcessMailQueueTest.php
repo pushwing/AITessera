@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Console\ProcessMailQueue;
+use App\Domain\JwtAlgorithm;
 use App\Support\Config;
 use App\Support\Mail\MailerInterface;
 use App\Support\Queue\QueueInterface;
@@ -27,7 +28,7 @@ final class ProcessMailQueueTest extends TestCase
             redisHost: '',
             redisPort: 6379,
             jwtSecret: 'test_secret_key_at_least_32_characters_long_xx',
-            jwtAlgo: 'HS256',
+            jwtAlgo: JwtAlgorithm::HS256,
             jwtAccessTtl: 900,
             jwtRefreshTtl: 1209600,
             emailVerifyTtl: 86400,

@@ -12,7 +12,8 @@ use Psr\Clock\ClockInterface;
 /**
  * 토큰 발급기.
  *
- * - Access Token: JWT(lcobucci, HS256) · 단기 · `sub`(userId) + `aff`(소속) + `role`(회원구분) 클레임
+ * - Access Token: JWT(lcobucci) · 단기 · `sub`(userId) + `aff`(소속) + `role`(회원구분) 클레임.
+ *   서명 알고리즘(HS256/RS256)·키는 주입된 Configuration 이 결정하므로 이 클래스는 알고리즘에 비의존적이다.
  * - Refresh Token: 암호학적 난수 문자열(불투명) · DB 에는 SHA-256 해시만 저장
  */
 final readonly class JwtIssuer

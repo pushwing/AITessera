@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\JwtAlgorithm;
 use App\Middleware\RateLimitMiddleware;
 use App\Repository\EmailVerificationRepository;
 use App\Repository\EmailVerificationRepositoryInterface;
@@ -29,6 +30,7 @@ use FastRoute\Dispatcher;
 use Lcobucci\JWT\Configuration as JwtConfiguration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
+use Lcobucci\JWT\Signer\Rsa\Sha256 as RsaSha256;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Predis\Client as RedisClient;
 use Psr\Clock\ClockInterface;
@@ -111,12 +113,22 @@ return [
         ]);
     }),
 
-    // JWT (lcobucci) — HS256 대칭키 서명 설정
+    // JWT (lcobucci) — 알고리즘별 서명 설정. 발급(JwtIssuer)·검증(JwtAuthMiddleware) 이
+    // 이 단일 Configuration 을 공유하므로 키/알고리즘 불일치가 구조적으로 차단된다.
     JwtConfiguration::class => factory(static function (Config $config): JwtConfiguration {
-        return JwtConfiguration::forSymmetricSigner(
-            new Sha256(),
-            InMemory::plainText($config->jwtSecret),
-        );
+        return match ($config->jwtAlgo) {
+            // HS256: 대칭키(HMAC) — 서명·검증 동일 키
+            JwtAlgorithm::HS256 => JwtConfiguration::forSymmetricSigner(
+                new Sha256(),
+                InMemory::plainText($config->jwtSecret),
+            ),
+            // RS256: 비대칭키(RSA) — 개인키로 서명, 공개키로 검증
+            JwtAlgorithm::RS256 => JwtConfiguration::forAsymmetricSigner(
+                new RsaSha256(),
+                InMemory::file($config->jwtPrivateKeyPath, $config->jwtPrivateKeyPassphrase),
+                InMemory::file($config->jwtPublicKeyPath),
+            ),
+        };
     }),
 
     // FastRoute 디스패처 — 라우트 정의를 컴파일

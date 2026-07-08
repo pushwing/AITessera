@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Domain\JwtAlgorithm;
 use RuntimeException;
 
 /**
@@ -24,13 +25,17 @@ final readonly class Config
         public string $redisHost,
         public int $redisPort,
         public string $jwtSecret,
-        public string $jwtAlgo,
+        public JwtAlgorithm $jwtAlgo,
         public int $jwtAccessTtl,
         public int $jwtRefreshTtl,
         public int $emailVerifyTtl,
         public string $appBaseUrl,
         public int $rateLimitAuth = 10,
         public int $rateLimitApi = 120,
+        // RS256 전용 — HS256 에서는 빈 문자열. 검증은 Config::fromEnv() 에서 알고리즘별로 수행한다.
+        public string $jwtPrivateKeyPath = '',
+        public string $jwtPublicKeyPath = '',
+        public string $jwtPrivateKeyPassphrase = '',
     ) {
     }
 
@@ -39,8 +44,26 @@ final readonly class Config
      */
     public static function fromEnv(): self
     {
+        $jwtAlgo = self::enumAlgo('JWT_ALGO', JwtAlgorithm::HS256);
         $jwtSecret = self::str('JWT_SECRET', '');
-        if ($jwtSecret === '') {
+        $jwtPrivateKeyPath = self::str('JWT_PRIVATE_KEY_PATH', '');
+        $jwtPublicKeyPath = self::str('JWT_PUBLIC_KEY_PATH', '');
+
+        // 알고리즘별로 필요한 시크릿이 다르므로 조건부 fail-fast 로 부팅 단계에서 즉시 검증한다.
+        if ($jwtAlgo->isAsymmetric()) {
+            if ($jwtPrivateKeyPath === '' || $jwtPublicKeyPath === '') {
+                throw new RuntimeException(
+                    'JWT_ALGO=RS256 에는 JWT_PRIVATE_KEY_PATH·JWT_PUBLIC_KEY_PATH 가 모두 필요합니다.',
+                );
+            }
+            // 경로 문자열만이 아니라 실제 파일 읽기 가능 여부까지 확인해, 배포 시 경로 오타·
+            // 권한 오류·키 배치 누락을 첫 요청이 아닌 부팅 시점에 잡는다.
+            foreach (['개인키' => $jwtPrivateKeyPath, '공개키' => $jwtPublicKeyPath] as $label => $path) {
+                if (!is_readable($path)) {
+                    throw new RuntimeException(sprintf('JWT %s 파일을 읽을 수 없습니다: %s', $label, $path));
+                }
+            }
+        } elseif ($jwtSecret === '') {
             throw new RuntimeException('JWT_SECRET 환경변수가 설정되지 않았습니다.');
         }
 
@@ -55,7 +78,10 @@ final readonly class Config
             redisHost: self::str('REDIS_HOST', '127.0.0.1'),
             redisPort: self::int('REDIS_PORT', 6379),
             jwtSecret: $jwtSecret,
-            jwtAlgo: self::str('JWT_ALGO', 'HS256'),
+            jwtAlgo: $jwtAlgo,
+            jwtPrivateKeyPath: $jwtPrivateKeyPath,
+            jwtPublicKeyPath: $jwtPublicKeyPath,
+            jwtPrivateKeyPassphrase: self::str('JWT_PRIVATE_KEY_PASSPHRASE', ''),
             jwtAccessTtl: self::int('JWT_ACCESS_TTL', 900),
             jwtRefreshTtl: self::int('JWT_REFRESH_TTL', 1209600),
             emailVerifyTtl: self::int('EMAIL_VERIFY_TTL', 86400),
@@ -92,5 +118,20 @@ final readonly class Config
         }
 
         return in_array(strtolower($value), ['1', 'true', 'on', 'yes'], true);
+    }
+
+    private static function enumAlgo(string $key, JwtAlgorithm $default): JwtAlgorithm
+    {
+        $value = $_ENV[$key] ?? null;
+        if (!is_string($value) || $value === '') {
+            return $default;
+        }
+
+        $algo = JwtAlgorithm::tryFrom($value);
+        if ($algo === null) {
+            throw new RuntimeException(sprintf('지원하지 않는 JWT_ALGO 값입니다: %s (허용: HS256, RS256)', $value));
+        }
+
+        return $algo;
     }
 }
