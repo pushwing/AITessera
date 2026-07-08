@@ -22,6 +22,7 @@ final readonly class JwtIssuer
         private JwtConfiguration $jwtConfig,
         private Config $config,
         private ClockInterface $clock,
+        private Jwks $jwks,
     ) {
     }
 
@@ -29,14 +30,23 @@ final readonly class JwtIssuer
     {
         $now = $this->clock->now();
 
-        return $this->jwtConfig->builder()
+        $builder = $this->jwtConfig->builder()
             ->issuedAt($now)
             // nbf(not-before) 를 발급 시각으로 설정 — 검증 측 StrictValidAt 이 iat·nbf·exp 존재를 모두 요구한다.
             ->canOnlyBeUsedAfter($now)
             ->expiresAt($now->modify(sprintf('+%d seconds', $this->config->jwtAccessTtl)))
             ->relatedTo((string) $userId)
             ->withClaim('aff', $affiliation)
-            ->withClaim('role', $role->value)
+            ->withClaim('role', $role->value);
+
+        // RS256 은 공개키에서 파생한 kid 를 헤더에 실어, JWKS 소비자가 검증 키를 매칭·회전할 수
+        // 있게 한다. HS256 은 공개할 키가 없으므로 kid 를 부착하지 않는다.
+        $kid = $this->jwks->signingKid();
+        if ($kid !== null) {
+            $builder = $builder->withHeader('kid', $kid);
+        }
+
+        return $builder
             ->getToken($this->jwtConfig->signer(), $this->jwtConfig->signingKey())
             ->toString();
     }

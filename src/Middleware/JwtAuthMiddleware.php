@@ -52,6 +52,8 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
         ['POST', '/api/v1/logs'],
         ['GET', '/api/docs'],
         ['GET', '/api/v1/openapi.json'],
+        ['GET', '/.well-known/jwks.json'],
+        ['GET', '/api/v1/jwks.json'],
     ];
 
     public function __construct(
