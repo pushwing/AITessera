@@ -60,6 +60,20 @@ final class JwtIssuerTest extends TestCase
         self::assertSame(UserRole::Operator->value, (int) $token->claims()->get('role'));
     }
 
+    public function testAccessTokenCarriesTimeClaimsForStrictValidation(): void
+    {
+        // 검증 측 StrictValidAt 은 iat·nbf·exp 존재를 모두 요구한다 — 발급기가 셋 다 넣어야 한다.
+        $jwt = $this->issuer->issueAccessToken(42, 'aivance', UserRole::Member);
+
+        $config = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
+        $token = $config->parser()->parse($jwt);
+        self::assertInstanceOf(UnencryptedToken::class, $token);
+
+        self::assertTrue($token->claims()->has('iat'));
+        self::assertTrue($token->claims()->has('nbf'));
+        self::assertTrue($token->claims()->has('exp'));
+    }
+
     public function testRefreshTokenHashIsDeterministicSha256(): void
     {
         self::assertSame(hash('sha256', 'abc'), $this->issuer->hashRefreshToken('abc'));
