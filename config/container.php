@@ -128,20 +128,34 @@ return [
 
     // JWT (lcobucci) — 알고리즘별 서명 설정. 발급(JwtIssuer)·검증(JwtAuthMiddleware) 이
     // 이 단일 Configuration 을 공유하므로 키/알고리즘 불일치가 구조적으로 차단된다.
+    //
+    // Config 는 알고리즘에 따라 시크릿/키 경로가 빈 문자열일 수 있어(HS256 이면 키 경로 '',
+    // RS256 이면 secret '') 프로퍼티 타입이 일반 string 이다. InMemory 는 non-empty-string 을
+    // 요구하므로, 각 알고리즘 분기에서 실제로 필요한 값이 비어 있지 않음을 가드로 다시 확인해
+    // 타입을 좁힌다(Config::fromEnv() 의 fail-fast 를 DI 경계에서 방어적으로 재확인).
     JwtConfiguration::class => factory(static function (Config $config): JwtConfiguration {
-        return match ($config->jwtAlgo) {
+        if ($config->jwtAlgo === JwtAlgorithm::HS256) {
             // HS256: 대칭키(HMAC) — 서명·검증 동일 키
-            JwtAlgorithm::HS256 => JwtConfiguration::forSymmetricSigner(
-                new Sha256(),
-                InMemory::plainText($config->jwtSecret),
-            ),
-            // RS256: 비대칭키(RSA) — 개인키로 서명, 공개키로 검증
-            JwtAlgorithm::RS256 => JwtConfiguration::forAsymmetricSigner(
-                new RsaSha256(),
-                InMemory::file($config->jwtPrivateKeyPath, $config->jwtPrivateKeyPassphrase),
-                InMemory::file($config->jwtPublicKeyPath),
-            ),
-        };
+            $secret = $config->jwtSecret;
+            if ($secret === '') {
+                throw new RuntimeException('HS256 서명에는 JWT_SECRET 이 필요합니다.');
+            }
+
+            return JwtConfiguration::forSymmetricSigner(new Sha256(), InMemory::plainText($secret));
+        }
+
+        // RS256: 비대칭키(RSA) — 개인키로 서명, 공개키로 검증
+        $privateKeyPath = $config->jwtPrivateKeyPath;
+        $publicKeyPath = $config->jwtPublicKeyPath;
+        if ($privateKeyPath === '' || $publicKeyPath === '') {
+            throw new RuntimeException('RS256 서명에는 JWT_PRIVATE_KEY_PATH·JWT_PUBLIC_KEY_PATH 가 필요합니다.');
+        }
+
+        return JwtConfiguration::forAsymmetricSigner(
+            new RsaSha256(),
+            InMemory::file($privateKeyPath, $config->jwtPrivateKeyPassphrase),
+            InMemory::file($publicKeyPath),
+        );
     }),
 
     // FastRoute 디스패처 — 라우트 정의를 컴파일
