@@ -13,8 +13,11 @@ use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
 use App\Repository\UserRepositoryInterface;
 use App\Support\Ai\ClaudeLogAiClassifier;
+use App\Support\Ai\ClaudeLogReportWriter;
 use App\Support\Ai\LogAiClassifierInterface;
+use App\Support\Ai\LogReportWriterInterface;
 use App\Support\Ai\NullLogAiClassifier;
+use App\Support\Ai\NullLogReportWriter;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
 use App\Support\Database;
@@ -83,6 +86,16 @@ return [
         }
 
         return new ClaudeLogAiClassifier($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
+
+    // 일일 로그 리포트 작성기 — 테스트이거나 API 키가 없으면 무동작(Null), 그 외 Claude API 구현.
+    // Null 을 받으면 워커가 통계 기반 폴백 리포트로 발송한다(외부 호출 없이도 파이프라인 동작).
+    LogReportWriterInterface::class => factory(static function (Config $config): LogReportWriterInterface {
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return new NullLogReportWriter();
+        }
+
+        return new ClaudeLogReportWriter($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
     }),
 
     // 레이트 리밋 저장소 — 테스트는 인메모리(무-Redis), 그 외 Redis 캐시

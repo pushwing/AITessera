@@ -49,6 +49,29 @@ final class ProcessMailQueueTest extends TestCase
         ]);
     }
 
+    public function testDispatchSendsDailyLogReport(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::once())->method('sendReport')
+            ->with('ops@aivance.test', '[AITessera] 일일 로그 리포트 (2026-07-12)', '리포트 본문');
+
+        $this->worker($mailer)->dispatch([
+            'type' => 'daily_log_report',
+            'to' => 'ops@aivance.test',
+            'subject' => '[AITessera] 일일 로그 리포트 (2026-07-12)',
+            'body' => '리포트 본문',
+        ]);
+    }
+
+    public function testDailyLogReportWithMissingFieldsIsIgnored(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::never())->method('sendReport');
+
+        // subject·body 누락 → 발송하지 않는다
+        $this->worker($mailer)->dispatch(['type' => 'daily_log_report', 'to' => 'ops@aivance.test']);
+    }
+
     public function testUnknownJobTypeIsIgnored(): void
     {
         $mailer = $this->createMock(MailerInterface::class);

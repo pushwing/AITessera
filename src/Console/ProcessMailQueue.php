@@ -46,8 +46,24 @@ final readonly class ProcessMailQueue
 
         match ($type) {
             'email_verification' => $this->sendEmailVerification($job),
+            'daily_log_report' => $this->sendDailyLogReport($job),
             default => null, // 알 수 없는 타입은 무시 (dead-letter 처리는 후속 작업)
         };
+    }
+
+    /**
+     * @param array<array-key, mixed> $job
+     */
+    private function sendDailyLogReport(array $job): void
+    {
+        $to = $job['to'] ?? null;
+        $subject = $job['subject'] ?? null;
+        $body = $job['body'] ?? null;
+        if (!is_string($to) || !is_string($subject) || !is_string($body)) {
+            return;
+        }
+
+        $this->mailer->sendReport($to, $subject, $body);
     }
 
     /**
