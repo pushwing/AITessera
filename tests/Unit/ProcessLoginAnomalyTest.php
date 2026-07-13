@@ -10,8 +10,11 @@ use App\Domain\Security\AnomalyScore;
 use App\Domain\Security\LoginEventSignals;
 use App\Repository\LoginEventRepositoryInterface;
 use App\Service\AuthService;
+use App\Service\UserService;
 use App\Support\Ai\LoginAnomalyScorerInterface;
 use App\Support\Config;
+use App\Support\Cooldown\CooldownInterface;
+use App\Support\Cooldown\InMemoryCooldown;
 use App\Support\Queue\QueueInterface;
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
@@ -118,17 +121,97 @@ final class ProcessLoginAnomalyTest extends TestCase
         self::assertSame(0, $this->worker($queue, $repo, $scorer)->run());
     }
 
+    public function testAlertQueuedWhenAnomalyAndRecipientConfigured(): void
+    {
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->method('pop')->willReturnOnConsecutiveCalls(
+            ['email' => 'victim@x.test', 'ip' => '10.0.0.9', 'user_agent' => 'UA', 'success' => true, 'occurred_at' => '2026-07-13 09:00:00'],
+            null,
+        );
+        // 임계값 초과 이벤트는 login_anomaly_alert 메일 잡으로 큐에 적재되어야 한다
+        $queue->expects(self::once())->method('push')->with(
+            UserService::MAIL_QUEUE,
+            self::callback(function (array $payload): bool {
+                return $payload['type'] === 'login_anomaly_alert'
+                    && $payload['to'] === 'soc@aivance.test'
+                    && is_string($payload['subject']) && str_contains($payload['subject'], 'victim@x.test')
+                    && is_string($payload['body']) && str_contains($payload['body'], '스터핑');
+            }),
+        );
+
+        $repo = $this->createMock(LoginEventRepositoryInterface::class);
+        $repo->method('insert')->willReturn(1);
+        $repo->method('signalsFor')->willReturn(new LoginEventSignals(1, 5, 6));
+
+        $scorer = $this->createMock(LoginAnomalyScorerInterface::class);
+        $scorer->method('score')->willReturn(new AnomalyScore(90, '실패 급증 후 성공 — 스터핑 의심'));
+
+        self::assertSame(1, $this->worker($queue, $repo, $scorer, new InMemoryCooldown(), 'soc@aivance.test')->run());
+    }
+
+    public function testAlertSuppressedByCooldownForSameAccountAndIp(): void
+    {
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->method('pop')->willReturnOnConsecutiveCalls(
+            ['email' => 'victim@x.test', 'ip' => '10.0.0.9', 'user_agent' => 'UA', 'success' => false, 'occurred_at' => '2026-07-13 09:00:00'],
+            ['email' => 'victim@x.test', 'ip' => '10.0.0.9', 'user_agent' => 'UA', 'success' => false, 'occurred_at' => '2026-07-13 09:00:30'],
+            null,
+        );
+        // 같은 계정+IP 두 이벤트지만 쿨다운으로 알림은 최초 1회만 나가야 한다
+        $queue->expects(self::once())->method('push');
+
+        $repo = $this->createMock(LoginEventRepositoryInterface::class);
+        $repo->method('insert')->willReturn(1, 2);
+        $repo->method('signalsFor')->willReturn(new LoginEventSignals(1, 5, 6));
+
+        $scorer = $this->createMock(LoginAnomalyScorerInterface::class);
+        $scorer->method('score')->willReturn(new AnomalyScore(90, '스터핑 의심'));
+
+        self::assertSame(2, $this->worker($queue, $repo, $scorer, new InMemoryCooldown(), 'soc@aivance.test')->run());
+    }
+
+    public function testNoAlertWhenRecipientNotConfigured(): void
+    {
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->method('pop')->willReturnOnConsecutiveCalls(
+            ['email' => 'victim@x.test', 'ip' => '10.0.0.9', 'user_agent' => 'UA', 'success' => true, 'occurred_at' => '2026-07-13 09:00:00'],
+            null,
+        );
+        // 수신자 미설정 → 알림 미발송
+        $queue->expects(self::never())->method('push');
+
+        $repo = $this->createMock(LoginEventRepositoryInterface::class);
+        $repo->method('insert')->willReturn(1);
+        $repo->method('signalsFor')->willReturn(new LoginEventSignals(1, 5, 6));
+
+        $scorer = $this->createMock(LoginAnomalyScorerInterface::class);
+        $scorer->method('score')->willReturn(new AnomalyScore(90, '스터핑 의심'));
+
+        self::assertSame(1, $this->worker($queue, $repo, $scorer, new InMemoryCooldown(), '')->run());
+    }
+
     private function worker(
         QueueInterface $queue,
         LoginEventRepositoryInterface $repo,
         LoginAnomalyScorerInterface $scorer,
+        ?CooldownInterface $cooldown = null,
+        string $recipient = '',
     ): ProcessLoginAnomaly {
         $clock = new FixedClock(new DateTimeImmutable('2026-07-13 09:05:00'));
 
-        return new ProcessLoginAnomaly($queue, $repo, $scorer, $this->config(), $clock, $this->anomalyDir, $this->deadDir);
+        return new ProcessLoginAnomaly(
+            $queue,
+            $repo,
+            $scorer,
+            $cooldown ?? new InMemoryCooldown(),
+            $this->config($recipient),
+            $clock,
+            $this->anomalyDir,
+            $this->deadDir,
+        );
     }
 
-    private function config(): Config
+    private function config(string $recipient = ''): Config
     {
         return new Config(
             appEnv: 'testing',
@@ -146,6 +229,7 @@ final class ProcessLoginAnomalyTest extends TestCase
             jwtRefreshTtl: 1209600,
             emailVerifyTtl: 86400,
             appBaseUrl: 'http://localhost:9300/',
+            securityAlertRecipient: $recipient,
         );
     }
 

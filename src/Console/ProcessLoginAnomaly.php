@@ -7,8 +7,10 @@ namespace App\Console;
 use App\Domain\Security\AnomalyScore;
 use App\Repository\LoginEventRepositoryInterface;
 use App\Service\AuthService;
+use App\Service\UserService;
 use App\Support\Ai\LoginAnomalyScorerInterface;
 use App\Support\Config;
+use App\Support\Cooldown\CooldownInterface;
 use App\Support\Queue\QueueInterface;
 use DateTimeImmutable;
 use Psr\Clock\ClockInterface;
@@ -39,6 +41,7 @@ final readonly class ProcessLoginAnomaly
         private QueueInterface $queue,
         private LoginEventRepositoryInterface $events,
         private LoginAnomalyScorerInterface $scorer,
+        private CooldownInterface $cooldown,
         private Config $config,
         private ClockInterface $clock,
         ?string $anomalyDir = null,
@@ -104,7 +107,66 @@ final readonly class ProcessLoginAnomaly
 
         if ($result->score >= $this->config->anomalyScoreThreshold) {
             $this->writeAnomaly($email, $ip, $userAgent, $success, $occurredAt, $result);
+            $this->maybeQueueAlert($email, $ip, $userAgent, $occurredAt, $result);
         }
+    }
+
+    /**
+     * 임계값 초과 이벤트를 실시간 메일 알림으로 큐에 적재한다 — 단, 폭주 방지를 위해
+     * 같은 계정+IP 는 쿨다운(ANOMALY_ALERT_COOLDOWN) 내 최초 1회만 발송한다.
+     *
+     * 수신자 미설정이면 스킵한다. 쿨다운 저장소 조회가 실패하면 알림 누락을 막기 위해
+     * fail-open 으로 발송을 진행한다(보안 알림은 놓치는 것보다 중복이 낫다).
+     */
+    private function maybeQueueAlert(
+        string $email,
+        string $ip,
+        ?string $userAgent,
+        string $occurredAt,
+        AnomalyScore $result,
+    ): void {
+        $recipient = $this->config->resolvedSecurityRecipient();
+        if ($recipient === '') {
+            return;
+        }
+
+        $key = 'login_anomaly:' . sha1($email . '|' . $ip);
+        try {
+            $fresh = $this->cooldown->acquire($key, $this->config->anomalyAlertCooldown);
+        } catch (Throwable) {
+            $fresh = true;
+        }
+        if (!$fresh) {
+            return;
+        }
+
+        $this->queue->push(UserService::MAIL_QUEUE, [
+            'type' => 'login_anomaly_alert',
+            'to' => $recipient,
+            'subject' => sprintf('[AITessera] 로그인 이상 감지 (점수 %d) — %s', $result->score, $email),
+            'body' => $this->alertBody($email, $ip, $userAgent, $occurredAt, $result),
+        ]);
+    }
+
+    /**
+     * 실시간 알림 본문 — anomaly_reason 이 이미 산출돼 있으므로 AI 없이 구조화 템플릿으로 조립한다.
+     */
+    private function alertBody(
+        string $email,
+        string $ip,
+        ?string $userAgent,
+        string $occurredAt,
+        AnomalyScore $result,
+    ): string {
+        return sprintf(
+            "로그인 이상 이벤트가 감지되었습니다.\n\n시각: %s\n계정: %s\nIP: %s\nUser-Agent: %s\n이상 점수: %d\n근거: %s",
+            $occurredAt,
+            $email,
+            $ip,
+            $userAgent ?? '(없음)',
+            $result->score,
+            $result->reason,
+        );
     }
 
     private function writeAnomaly(

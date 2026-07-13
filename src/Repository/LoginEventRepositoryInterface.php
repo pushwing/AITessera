@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repository;
 
+use App\Domain\Security\DailySecurityStats;
 use App\Domain\Security\LoginEventSignals;
 
 /**
@@ -35,4 +36,15 @@ interface LoginEventRepositoryInterface
      * 스코어링 결과(점수·근거)를 해당 이벤트 행에 기록한다.
      */
     public function updateScore(int $id, int $score, string $reason): void;
+
+    /**
+     * 하루치(대상일 00:00:00 이상 ~ 다음날 00:00:00 미만) 로그인 이벤트를 보안 관점으로 집계한다.
+     *
+     * 일일 보안 리포트의 입력을 만든다. 총 시도·실패·이상(임계값 이상) 건수·최고 점수와
+     * 실패 상위 계정·시도 상위 IP 를 산출한다. occurred_at 범위 인덱스를 활용한다.
+     *
+     * @param string $date      집계 대상 날짜 (Y-m-d)
+     * @param int    $threshold 이상으로 집계할 점수 임계값(0~100)
+     */
+    public function aggregateForDate(string $date, int $threshold): DailySecurityStats;
 }
