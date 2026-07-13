@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# pre-push 훅 — 원격 push 전에 로컬에서 전체 검증(composer check)을 실행한다.
+# 목적: CI(mysql+redis 컨테이너, 3~5분)에서 실패를 발견해 다시 push 하는 왕복 대신,
+#       로컬 수초짜리 실패로 빨간 브랜치를 애초에 push 하지 않도록 막는다.
+#
+# 우회가 필요할 때(긴급 등): git push --no-verify
+#
+# 설치: `composer install` 시 post-install-cmd 가 자동으로 core.hooksPath 를 .githooks 로 설정한다.
+#       수동 설치는:  git config core.hooksPath .githooks
+
+set -euo pipefail
+
+# 저장소 루트로 이동 (훅은 임의 CWD 에서 호출될 수 있다)
+cd "$(git rev-parse --show-toplevel)"
+
+echo "▶ pre-push: composer check 실행 중… (스타일·PHPStan·PHPUnit)"
+
+if ! composer check; then
+    echo ""
+    echo "✖ pre-push 중단: composer check 실패. 위 오류를 수정한 뒤 다시 push 하세요."
+    echo "  (긴급 우회가 필요하면: git push --no-verify)"
+    exit 1
+fi
+
+echo "✔ pre-push: 검증 통과 — push 진행"

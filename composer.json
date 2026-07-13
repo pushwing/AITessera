@@ -50,11 +50,17 @@
         "analyse": "phpstan analyse",
         "cs-fix": "php-cs-fixer fix",
         "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "fix": [
+            "@cs-fix",
+            "@analyse"
+        ],
         "check": [
             "@cs-check",
             "@analyse",
             "@test"
-        ]
+        ],
+        "post-install-cmd": "git config core.hooksPath .githooks || true",
+        "post-update-cmd": "git config core.hooksPath .githooks || true"
     },
     "scripts-descriptions": {
         "serve": "개발 서버 — PHP 내장 서버 (localhost:9300, DocumentRoot=public)",
@@ -62,6 +68,7 @@
         "analyse": "PHPStan (level 8) 단독 실행",
         "cs-fix": "PHP-CS-Fixer 자동 정렬",
         "cs-check": "PHP-CS-Fixer dry-run (커밋 전 검사)",
-        "check": "cs-check + PHPStan + PHPUnit 순차 실행"
+        "fix": "개발용 내부 루프 — 스타일 자동 교정 + PHPStan (테스트 제외, 빠름)",
+        "check": "cs-check + PHPStan + PHPUnit 순차 실행 (커밋 전 최종 게이트)"
     }
 }
