@@ -6,25 +6,9 @@ AITessera — Secure JWT-based authentication & authorization API for the AIvanc
 **프레임워크 없는 순수 모던 PHP(8.3+)** 기반 REST API 단일 프로젝트. 검증된 표준 라이브러리를
 조합해 구성하며, JWT·암호화 등 보안 핵심은 절대 직접 구현하지 않고 신뢰받는 라이브러리에 위임한다.
 
-## 규칙 문서 구성
-
-주제별 세부 규칙은 `.claude/rules/` 로 분리했다. 아래 `@import` 로 **자동 로딩**되므로 별도로 열지 않아도 항상 적용된다.
-
-- [`security.md`](.claude/rules/security.md) — 인증 설계·JWT 검증·보안 절대 금지
-- [`code-style.md`](.claude/rules/code-style.md) — 네이밍·코딩 규칙·모던 PHP·레이어 책임·도메인 예외
-- [`testing.md`](.claude/rules/testing.md) — 정적 분석(PHPStan)·테스트
-- [`api-design.md`](.claude/rules/api-design.md) — 응답 포맷·에러 코드·REST URI·OpenAPI
-
-@.claude/rules/security.md
-@.claude/rules/code-style.md
-@.claude/rules/testing.md
-@.claude/rules/api-design.md
-
-## 언어 규칙
-
-- 모든 응답은 반드시 한국어로 작성할 것
-- 코드 주석도 한국어로 작성할 것
-- 영어 응답은 절대 금지
+> **공통 규칙은 전역 [`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md) 에서 자동 상속**된다(언어·Git 워크플로우·보안·코드 스타일·테스트·API 설계·부하 분산·로그 파이프라인·PHP LSP). 이 문서는 **AITessera 저장소 전용**(프레임워크리스 스택·아키텍처·CI/CD) 규칙만 정의한다.
+>
+> 프레임워크리스 프로젝트이므로 전역 규칙의 CI4 표현은 다음으로 매핑한다: `esc()`→`htmlspecialchars`/JSON, Query Builder→PDO prepared, `model()`→DI 주입, `.env`→`vlucas/phpdotenv`.
 
 ## 기술 스택
 
@@ -50,7 +34,7 @@ AITessera — Secure JWT-based authentication & authorization API for the AIvanc
 | **코드 스타일** | PHP-CS-Fixer (PSR-12) | 커밋 전 자동 정렬 |
 | **테스트** | PHPUnit | 단위·통합 |
 
-> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 [`.claude/rules/security.md`](.claude/rules/security.md) 참고.
+> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 전역 [`~/.claude/rules/security.md`](~/.claude/rules/security.md) 참고.
 
 ## 로컬 환경 설정
 
@@ -152,222 +136,27 @@ return $handler->handle($request);
 $userId = (int) $request->getAttribute('userId');
 ```
 
-> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — [`.claude/rules/security.md`](.claude/rules/security.md) 참고.
+> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — 전역 [`~/.claude/rules/security.md`](~/.claude/rules/security.md) 참고.
 
-## Git 워크플로우
+### 프레임워크리스 아키텍처 절대 금지
 
-```
-feature/* → (PR) → dev → (PR) → main
-```
+전역 [`~/.claude/rules/code-style.md`](~/.claude/rules/code-style.md) 의 레이어 책임에 더해, 프레임워크가 없으므로 아래를 특히 강제한다.
 
-- **PR 대상**: `feature/*` → `dev`
-- **배포**: `dev` → `main` PR
-- **머지 방식**:
-  - `feature/*` → `dev`: **Squash and merge**
-  - `dev` → `main`(배포): **Merge commit** (⚠️ Squash 금지 — 아래 주의)
-- **머지 후**: `feature/*` 브랜치 자동 삭제
-- `main`에 직접 push 금지
-- `dev`에 직접 push 금지 (단, **문서 전용 변경**은 예외 — 아래 참고)
+| 금지 | 이유 |
+|------|------|
+| Controller·Service 에서 SQL 직접 실행 | 데이터 접근은 Repository 로 격리 |
+| `PDO`·`Redis` 를 전역/싱글턴으로 직접 참조 | DI 컨테이너 경유(생성자 주입) |
+| `new Service()` 직접 인스턴스화 | 컨테이너가 주입 — 수동 `new` 금지 |
+| 미들웨어 밖에서 인증 상태 조작 | 인증은 `JwtAuthMiddleware` 한 곳으로 |
+| `public/` 밖 파일을 웹에 노출 | 진입점은 `public/index.php` 하나만 |
 
-> ⚠️ **`dev → main` 배포 PR 을 Squash 로 머지하면 안 된다.** Squash 는 `dev` 커밋들을
-> 새 커밋 하나로 눌러 `main` 을 `dev` 의 조상에서 이탈시킨다. 그러면 다음 배포마다
-> `deploy.yml` 등에서 3-way 충돌이 재발한다. **반드시 merge commit** 으로 머지해
-> `main` 이 `dev` 의 조상으로 유지되게 한다(배포 = fast-forward → 무충돌).
+### OpenAPI 문서 (구성 위치)
 
-### 문서 전용 변경 예외
-
-**코드 변경 없이 문서만 수정된 경우**엔 `feature/*` 브랜치·PR 절차를 건너뛰고 `dev` 에 직접 커밋·반영한다.
-
-- **대상 (문서 파일만)**: `*.md`(CLAUDE.md·README 등), `.claude/rules/`, `docs/`
-- **예외 아님**: `src/`·`migrations/`·`config/`·`tests/`·`composer.json`·`.github/` 등 **코드·설정이 하나라도 섞이면** 기존 `feature/*` → `dev` PR 흐름을 따른다
-- 커밋 메시지는 `docs:` 접두어 사용
-- **`main` 직접 push 는 문서라도 여전히 금지** — 배포는 항상 `dev` → `main` PR(merge commit)
-
-### 기능 개발 시작
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b feature/기능명   # 예: feature/token-refresh
-```
-
-### dev가 앞서간 경우 rebase
-
-```bash
-git rebase origin/dev
-git push --force-with-lease origin feature/기능명
-```
-
-### 커밋 메시지 (Conventional Commits)
-
-| 접두어 | 용도 |
-|--------|------|
-| `feat` | 새 기능 |
-| `fix` | 버그 수정 |
-| `refactor` | 리팩토링 |
-| `docs` | 문서 |
-| `chore` | 설정·빌드 |
-| `test` | 테스트 |
-
-자세한 내용: `docs/git-workflow.md`
-
-## API 부하 분산 원칙
-
-API 개발 시 부하 분산을 최우선으로 고려한다. 아래 원칙을 기본으로 적용한다.
-
-### 캐시
-
-- 변경 빈도가 낮은 조회 응답은 **Redis 캐시** 적용
-- 캐시 키 규칙: `{리소스}:{식별자}:{파라미터해시}` (예: `users:list:abc123`)
-- TTL 기준
-
-| 데이터 성격 | TTL |
-|------------|-----|
-| 설정·코드성 데이터 | 1시간 이상 |
-| 목록·집계 | 5–60분 |
-| 단건 상세 | 5–10분 |
-| 실시간 필요 데이터 | 캐시 적용 금지 |
-
-- 쓰기(INSERT·UPDATE·DELETE) 발생 시 관련 캐시 즉시 무효화
-- 캐시 미스 시 DB 조회 후 캐시 저장 — 로직은 Service 레이어에서 처리
-
-### 큐
-
-- 즉시 응답이 불필요한 작업은 큐로 위임 (이메일·알림·로그·리포트 생성 등)
-- API는 큐 적재 후 즉시 `202 Accepted` 반환
-- 무거운 연산(배치 집계·엑셀 생성 등)은 절대 요청 사이클 안에서 처리 금지
-
-### DB 쿼리
-
-- `SELECT *` 금지 — 필요한 컬럼만 명시
-- N+1 쿼리 금지 — 관계 데이터는 JOIN 으로 조회
-- 목록 API는 반드시 페이징 적용 (`limit` / `offset` 또는 커서 기반)
-- 인덱스 없는 컬럼 `WHERE` 조건 금지 — 마이그레이션에 인덱스 함께 정의
-- 집계 쿼리(`COUNT`, `SUM` 등)는 캐시 우선 적용
-
-### API 응답
-
-- 불필요한 필드 제거 — 응답 페이로드 최소화
-- 목록 응답에 `meta.total`, `meta.page` 포함
-- 대용량 데이터 응답은 스트리밍 또는 청크 분할 고려
-
-### 기타
-
-- 외부 API 호출은 타임아웃 설정 필수 (기본 5초)
-- 외부 API 실패 시 재시도는 큐로 처리 (즉시 재시도 금지)
-- 동일 엔드포인트 반복 호출 방어: `symfony/rate-limiter` 미들웨어 적용
-
-## 로그 수집 파이프라인
-
-프론트(앱/웹)에서 API로 전송되는 로그는 큐를 통해 비동기 처리한다.
-
-### 흐름
-
-```
-앱/웹
-  │
-  │ POST /api/v1/logs
-  ▼
-API Server
-  │ 큐에 적재 (즉시 응답)
-  ▼
-Queue (Redis)
-  │
-  ▼
-Queue Consumer (bin/console 워커 / 스케줄러)
-  ├── 원시 로그 → 파일 저장 (var/logs/raw/YYYY-MM-DD.log)
-  └── 가공 데이터 → DB INSERT
-```
-
-### 규칙
-
-- API는 로그를 받는 즉시 큐에 넣고 `202 Accepted` 응답 — DB 직접 쓰기 금지
-- 큐 드라이버: **Redis** (`predis/predis`)
-- 원시(raw) 로그는 `var/logs/raw/` 에 날짜별 파일로 append
-- 가공 후 DB 저장 — 원시 파일은 보존 (감사·재처리 용도)
-- Consumer 는 `bin/console` CLI 워커로 구현, cron / systemd timer 로 주기 실행
-- 큐 처리 실패 시 dead-letter 로깅 필수 (`var/logs/queue-failed/`)
-
-### 기본 패턴
-
-```php
-// API Controller — 큐에 적재
-public function store(ServerRequestInterface $request): ResponseInterface
-{
-    $payload = (array) $request->getParsedBody();
-    // 유효성 검사 후
-    $this->redis->lpush('log_queue', json_encode($payload, JSON_THROW_ON_ERROR));
-    return $this->respond(null, 202);
-}
-
-// bin/console 워커 — Consumer
-final class ProcessLogQueue
-{
-    public function run(): void
-    {
-        while ($raw = $this->redis->rpop('log_queue')) {
-            // 1. 원시 파일 저장
-            file_put_contents(
-                VAR_PATH . '/logs/raw/' . date('Y-m-d') . '.log',
-                $raw . PHP_EOL,
-                FILE_APPEND,
-            );
-            // 2. 가공 후 DB 저장
-            $data = $this->transform(json_decode($raw, true, 512, JSON_THROW_ON_ERROR));
-            $this->logRepository->insert($data);
-        }
-    }
-}
-```
-
-## PHP 언어 서버 (Intelephense LSP)
-
-Claude Code 가 PHP 코드를 심볼 단위(정의 이동·참조 찾기·자동완성)로 정확히 다루도록 **Intelephense LSP** 를 연동한다. PHPStan 이 "타입 오류 검사"라면 Intelephense 는 "코드 구조 이해" 역할로 상호 보완한다.
-
-> 이 연동은 **Claude Code CLI 세션 전용**이다. VS Code·JetBrains 확장에서 쓰는 Intelephense 와는 별개 인스턴스이므로 에디터에는 에디터대로 따로 설치한다.
-
-### 설치 (최초 1회)
-
-```bash
-# 1. 바이너리 설치 (Node.js + npm 필요)
-npm install -g intelephense
-
-# 2. 로컬 LSP 플러그인 생성 (~/.claude/skills/ 하위 → 전 프로젝트 공용)
-mkdir -p ~/.claude/skills/php-lsp-intelephense/.claude-plugin
-
-cat > ~/.claude/skills/php-lsp-intelephense/.claude-plugin/plugin.json << 'EOF'
-{
-  "name": "php-lsp-intelephense",
-  "description": "Intelephense PHP 언어 서버",
-  "version": "1.0.0"
-}
-EOF
-
-cat > ~/.claude/skills/php-lsp-intelephense/.lsp.json << 'EOF'
-{
-  "php": {
-    "command": "intelephense",
-    "args": ["--stdio"],
-    "extensionToLanguage": { ".php": "php" }
-  }
-}
-EOF
-```
-
-> ⚠️ 공식 `php-lsp@claude-plugins-official` 플러그인은 `.lsp.json` 이 누락되어 동작하지 않는다([이슈 #444](https://github.com/anthropics/claude-plugins-official/issues/444)). 위처럼 로컬 플러그인을 직접 만든다.
-
-### 활성화·확인
-
-- **활성화**: 새 Claude Code 세션을 시작하거나, 대화형 세션에서 `/reload-plugins` 실행 (플러그인은 세션 시작 시 로드된다)
-- **확인**: `/help` 의 "Installed plugins" 에 `php-lsp-intelephense` 표시
-- **동작 점검**: `intelephense --version` 은 플래그 미지원으로 에러를 뱉으니 정상 판정 근거로 쓰지 말 것. 실제 기동은 `--stdio` 모드의 `initialize` 응답으로 확인한다.
-
-### 사용
-
-개발자가 직접 실행하는 명령이 아니라, Claude 가 PHP 코드를 다룰 때 뒤에서 참조한다. "이 메서드 쓰는 곳 전부 찾아줘", "정의로 가줘" 같은 요청을 텍스트 grep 대신 심볼 단위로 정확히 처리한다.
-
-- **무료 범위**: 정의 이동·참조 찾기·자동완성·심볼 검색 (충분)
-- **프리미엄($25/년)**: 워크스페이스 전역 rename·고급 리팩토링
+전역 [`~/.claude/rules/api-design.md`](~/.claude/rules/api-design.md) 의 OpenAPI 규칙을 따르되, AITessera 는:
+- **요청/응답 스키마**는 `src/OpenApi/Schema/` 의 `#[OA\Schema]` 컴포넌트로 정의하고 `$ref` 로 참조(인라인 중복 금지).
+- 모든 4xx/5xx 응답은 공용 `ErrorResponse` 컴포넌트를 참조.
+- 전역 정의(Info·Server·`bearerAuth` 보안 스킴)는 `src/OpenApiSpec.php` 에 둔다.
+- 스펙 경로: `/api/v1/openapi.json`(swagger-php v5 가 `src/` 스캔 → JSON, 운영은 캐시).
 
 ## CI (GitHub Actions)
 
@@ -437,10 +226,6 @@ EOF
 ```bash
 cd <DEPLOY_PATH> && php bin/console seed:admin
 ```
-
-### 브랜치 삭제 방지
-
-저장소가 프라이빗+무료 플랜이라 GitHub 브랜치 보호·Ruleset API 는 사용 불가(Pro 필요). 대신 저장소 설정 `delete_branch_on_merge=false` 로 `dev → main` 머지 시 `dev` 자동삭제를 막는다. `main` 은 기본 브랜치라 삭제 불가.
 
 ## 클라우드·인프라 (참고)
 
