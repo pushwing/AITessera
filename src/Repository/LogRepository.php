@@ -22,10 +22,12 @@ final readonly class LogRepository implements LogRepositoryInterface
         ?string $source,
         ?int $userId,
         ?string $loggedAt,
+        ?string $aiCategory = null,
+        ?string $aiSummary = null,
     ): void {
         $stmt = $this->db->pdo()->prepare(
-            'INSERT INTO client_logs (level, message, context, source, user_id, logged_at)
-             VALUES (:level, :message, :context, :source, :user_id, :logged_at)',
+            'INSERT INTO client_logs (level, message, context, source, user_id, logged_at, ai_category, ai_summary)
+             VALUES (:level, :message, :context, :source, :user_id, :logged_at, :ai_category, :ai_summary)',
         );
         $stmt->execute([
             'level' => $level,
@@ -34,6 +36,8 @@ final readonly class LogRepository implements LogRepositoryInterface
             'source' => $source,
             'user_id' => $userId,
             'logged_at' => $loggedAt,
+            'ai_category' => $aiCategory,
+            'ai_summary' => $aiSummary,
         ]);
     }
 }
