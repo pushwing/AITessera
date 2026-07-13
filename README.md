@@ -190,7 +190,7 @@ composer analyse    # PHPStan (level 8)
 composer cs-fix     # PHP-CS-Fixer 자동 정렬
 composer cs-check   # PHP-CS-Fixer dry-run
 composer check      # cs-check + analyse + test 순차 실행
-php bin/console <command>   # CLI (migrate·rollback·seed:run·jwt:keygen·mail:work·log:work)
+php bin/console <command>   # CLI (migrate·rollback·seed:run·jwt:keygen·mail:work·log:work·security:scan·report:daily)
 ```
 
 ---
@@ -368,3 +368,10 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - [x] RateLimit 미들웨어 (brute-force 방어)
 - [x] Swagger UI (`/api/docs`)
 - [x] 로그 수집 파이프라인 (큐 컨슈머)
+- [x] AI 로그 자동 분류·요약 — `log:work` 컨슈머가 error/critical 로그를 Claude API 로 분류·요약 (#50)
+- [x] AI 일일 이상징후 리포트 — `report:daily` 가 로그를 집계·분석해 메일 큐로 발송 (#51)
+- [x] AI 로그인 이상 탐지 — `security:scan` 이 로그인 이벤트를 규칙 + AI 로 스코어링 (#52)
+
+> AI 기능은 요청 사이클 밖(큐 컨슈머·스케줄러)에서만 동작하며, `ANTHROPIC_API_KEY` 미설정 시
+> 규칙 기반으로 동작(이상 탐지)하거나 건너뛴다(분류·리포트). 관련 `.env` 키는 `.env.example` 의
+> `AI 로그 분류` 섹션 참고. CLI: `php bin/console log:work | report:daily | security:scan`.
