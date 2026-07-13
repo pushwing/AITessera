@@ -7,6 +7,7 @@ declare(strict_types=1);
 // phinx 마이그레이션 위임 + 애플리케이션 커맨드(큐 컨슈머 등)를 지원한다.
 
 use App\Console\GenerateDailyLogReport;
+use App\Console\ProcessLoginAnomaly;
 use App\Console\ProcessLogQueue;
 use App\Console\ProcessMailQueue;
 use App\Support\ContainerFactory;
@@ -42,6 +43,7 @@ $usage = static function (): int {
       seed:run    시더 실행
       mail:work   메일 큐 컨슈머 (큐를 비우고 종료)
       log:work    로그 큐 컨슈머 (큐를 비우고 종료)
+      security:scan 로그인 이벤트 큐 소비 → 이상 스코어링·기록 (큐를 비우고 종료)
       report:daily 전일 로그 집계 → AI 일일 리포트 생성 → 메일 큐 적재
       jwt:keygen  RS256 서명용 RSA 키페어 생성 (--force 로 덮어쓰기)
 
@@ -102,6 +104,15 @@ $logWork = static function (): int {
     return 0;
 };
 
+$securityScan = static function (): int {
+    $worker = ContainerFactory::build()->get(ProcessLoginAnomaly::class);
+    assert($worker instanceof ProcessLoginAnomaly);
+    $count = $worker->run();
+    fwrite(STDOUT, "로그인 이벤트 {$count}건 스코어링 완료\n");
+
+    return 0;
+};
+
 $reportDaily = static function (): int {
     $worker = ContainerFactory::build()->get(GenerateDailyLogReport::class);
     assert($worker instanceof GenerateDailyLogReport);
@@ -120,6 +131,7 @@ $exitCode = match ($command) {
     'seed:run'         => $runPhinx(['seed:run']),
     'mail:work'        => $mailWork(),
     'log:work'         => $logWork(),
+    'security:scan'    => $securityScan(),
     'report:daily'     => $reportDaily(),
     'jwt:keygen'       => $jwtKeygen($argv),
     'list', '--help', '-h' => $usage(),
