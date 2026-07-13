@@ -38,6 +38,8 @@ final readonly class Config
         public int $aiTimeout = 5,
         // 일일 로그 리포트 수신자 이메일. 비면(기본) 리포트 워커가 발송을 건너뛴다.
         public string $logReportRecipient = '',
+        // 로그인 이상 탐지 임계값(0~100). 이 점수 이상이면 이상징후 로그에 기록한다.
+        public int $anomalyScoreThreshold = 70,
         // RS256 전용 — HS256 에서는 빈 문자열. 검증은 Config::fromEnv() 에서 알고리즘별로 수행한다.
         public string $jwtPrivateKeyPath = '',
         public string $jwtPublicKeyPath = '',
@@ -98,6 +100,7 @@ final readonly class Config
             anthropicModel: self::str('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
             aiTimeout: self::int('AI_TIMEOUT', 5),
             logReportRecipient: self::str('LOG_REPORT_RECIPIENT', ''),
+            anomalyScoreThreshold: self::int('ANOMALY_SCORE_THRESHOLD', 70),
         );
     }
 

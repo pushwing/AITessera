@@ -6,6 +6,8 @@ use App\Domain\JwtAlgorithm;
 use App\Middleware\RateLimitMiddleware;
 use App\Repository\EmailVerificationRepository;
 use App\Repository\EmailVerificationRepositoryInterface;
+use App\Repository\LoginEventRepository;
+use App\Repository\LoginEventRepositoryInterface;
 use App\Repository\LogRepository;
 use App\Repository\LogRepositoryInterface;
 use App\Repository\RefreshTokenRepository;
@@ -13,11 +15,14 @@ use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
 use App\Repository\UserRepositoryInterface;
 use App\Support\Ai\ClaudeLogAiClassifier;
+use App\Support\Ai\ClaudeLoginAnomalyScorer;
 use App\Support\Ai\ClaudeLogReportWriter;
 use App\Support\Ai\LogAiClassifierInterface;
+use App\Support\Ai\LoginAnomalyScorerInterface;
 use App\Support\Ai\LogReportWriterInterface;
 use App\Support\Ai\NullLogAiClassifier;
 use App\Support\Ai\NullLogReportWriter;
+use App\Support\Ai\RuleLoginAnomalyScorer;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
 use App\Support\Database;
@@ -69,6 +74,7 @@ return [
     RefreshTokenRepositoryInterface::class => autowire(RefreshTokenRepository::class),
     EmailVerificationRepositoryInterface::class => autowire(EmailVerificationRepository::class),
     LogRepositoryInterface::class => autowire(LogRepository::class),
+    LoginEventRepositoryInterface::class => autowire(LoginEventRepository::class),
 
     // 큐 — 테스트는 인메모리(무-Redis), 그 외 Redis 리스트
     QueueInterface::class => factory(static function (Config $config, RedisClient $redis): QueueInterface {
@@ -96,6 +102,17 @@ return [
         }
 
         return new ClaudeLogReportWriter($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
+
+    // 로그인 이상 스코어러(하이브리드) — 규칙 기반이 항상 기준선이고, API 키가 있으면 Claude 가
+    // 규칙 신호를 근거로 종합 점수를 정교화한다(실패 시 규칙 폴백). 테스트·키없음은 규칙만 사용.
+    LoginAnomalyScorerInterface::class => factory(static function (Config $config): LoginAnomalyScorerInterface {
+        $rule = new RuleLoginAnomalyScorer();
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return $rule;
+        }
+
+        return new ClaudeLoginAnomalyScorer($config->anthropicApiKey, $config->anthropicModel, $rule, $config->aiTimeout);
     }),
 
     // 레이트 리밋 저장소 — 테스트는 인메모리(무-Redis), 그 외 Redis 캐시
