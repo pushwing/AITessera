@@ -36,6 +36,8 @@ final readonly class Config
         public string $anthropicApiKey = '',
         public string $anthropicModel = 'claude-haiku-4-5-20251001',
         public int $aiTimeout = 5,
+        // 일일 로그 리포트 수신자 이메일. 비면(기본) 리포트 워커가 발송을 건너뛴다.
+        public string $logReportRecipient = '',
         // RS256 전용 — HS256 에서는 빈 문자열. 검증은 Config::fromEnv() 에서 알고리즘별로 수행한다.
         public string $jwtPrivateKeyPath = '',
         public string $jwtPublicKeyPath = '',
@@ -95,6 +97,7 @@ final readonly class Config
             anthropicApiKey: self::str('ANTHROPIC_API_KEY', ''),
             anthropicModel: self::str('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
             aiTimeout: self::int('AI_TIMEOUT', 5),
+            logReportRecipient: self::str('LOG_REPORT_RECIPIENT', ''),
         );
     }
 

@@ -16,4 +16,9 @@ interface MailerInterface
      * 이메일 인증 메일을 발송한다.
      */
     public function sendEmailVerification(string $to, string $verificationLink): void;
+
+    /**
+     * 임의 제목·본문의 리포트성 메일을 발송한다(일일 로그 리포트 등).
+     */
+    public function sendReport(string $to, string $subject, string $body): void;
 }
