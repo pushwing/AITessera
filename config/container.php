@@ -12,6 +12,9 @@ use App\Repository\RefreshTokenRepository;
 use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
 use App\Repository\UserRepositoryInterface;
+use App\Support\Ai\ClaudeLogAiClassifier;
+use App\Support\Ai\LogAiClassifierInterface;
+use App\Support\Ai\NullLogAiClassifier;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
 use App\Support\Database;
@@ -71,6 +74,16 @@ return [
 
     // 메일러 — 개발용 로그 구현 (운영은 symfony/mailer SMTP 로 교체)
     MailerInterface::class => autowire(LogMailer::class),
+
+    // 로그 AI 분류기 — 테스트이거나 API 키가 없으면 무동작(Null), 그 외 Claude API 구현.
+    // 이렇게 두면 CI·로컬은 외부 호출 없이 동작하고, 운영은 키만 주입하면 실제 분류가 켜진다.
+    LogAiClassifierInterface::class => factory(static function (Config $config): LogAiClassifierInterface {
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return new NullLogAiClassifier();
+        }
+
+        return new ClaudeLogAiClassifier($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
 
     // 레이트 리밋 저장소 — 테스트는 인메모리(무-Redis), 그 외 Redis 캐시
     StorageInterface::class => factory(static function (Config $config, RedisClient $redis): StorageInterface {

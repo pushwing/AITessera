@@ -5,6 +5,7 @@
     "license": "proprietary",
     "require": {
         "php": "^8.4",
+        "ext-curl": "*",
         "ext-json": "*",
         "ext-pdo": "*",
         "lcobucci/jwt": "^5.4",

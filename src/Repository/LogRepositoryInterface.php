@@ -19,5 +19,7 @@ interface LogRepositoryInterface
         ?string $source,
         ?int $userId,
         ?string $loggedAt,
+        ?string $aiCategory = null,
+        ?string $aiSummary = null,
     ): void;
 }

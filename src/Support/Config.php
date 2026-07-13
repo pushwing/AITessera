@@ -32,6 +32,10 @@ final readonly class Config
         public string $appBaseUrl,
         public int $rateLimitAuth = 10,
         public int $rateLimitApi = 120,
+        // AI 로그 분류(Claude API) — 키가 비면 분류를 건너뛰고 로그는 정상 저장된다.
+        public string $anthropicApiKey = '',
+        public string $anthropicModel = 'claude-haiku-4-5-20251001',
+        public int $aiTimeout = 5,
         // RS256 전용 — HS256 에서는 빈 문자열. 검증은 Config::fromEnv() 에서 알고리즘별로 수행한다.
         public string $jwtPrivateKeyPath = '',
         public string $jwtPublicKeyPath = '',
@@ -88,6 +92,9 @@ final readonly class Config
             appBaseUrl: self::str('APP_BASE_URL', 'http://localhost:9300/'),
             rateLimitAuth: self::int('RATE_LIMIT_AUTH', 10),
             rateLimitApi: self::int('RATE_LIMIT_API', 120),
+            anthropicApiKey: self::str('ANTHROPIC_API_KEY', ''),
+            anthropicModel: self::str('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
+            aiTimeout: self::int('AI_TIMEOUT', 5),
         );
     }
 
