@@ -32,6 +32,18 @@ final readonly class Config
         public string $appBaseUrl,
         public int $rateLimitAuth = 10,
         public int $rateLimitApi = 120,
+        // AI 로그 분류(Claude API) — 키가 비면 분류를 건너뛰고 로그는 정상 저장된다.
+        public string $anthropicApiKey = '',
+        public string $anthropicModel = 'claude-haiku-4-5-20251001',
+        public int $aiTimeout = 5,
+        // 일일 로그 리포트 수신자 이메일. 비면(기본) 리포트 워커가 발송을 건너뛴다.
+        public string $logReportRecipient = '',
+        // 로그인 이상 탐지 임계값(0~100). 이 점수 이상이면 이상징후 로그에 기록한다.
+        public int $anomalyScoreThreshold = 70,
+        // 보안 알림/리포트 수신자. 비면 resolvedSecurityRecipient() 가 logReportRecipient 로 폴백한다.
+        public string $securityAlertRecipient = '',
+        // 로그인 이상 실시간 알림 쿨다운(초). 같은 계정+IP 는 이 시간 내 최초 1회만 알림한다.
+        public int $anomalyAlertCooldown = 1800,
         // RS256 전용 — HS256 에서는 빈 문자열. 검증은 Config::fromEnv() 에서 알고리즘별로 수행한다.
         public string $jwtPrivateKeyPath = '',
         public string $jwtPublicKeyPath = '',
@@ -88,12 +100,28 @@ final readonly class Config
             appBaseUrl: self::str('APP_BASE_URL', 'http://localhost:9300/'),
             rateLimitAuth: self::int('RATE_LIMIT_AUTH', 10),
             rateLimitApi: self::int('RATE_LIMIT_API', 120),
+            anthropicApiKey: self::str('ANTHROPIC_API_KEY', ''),
+            anthropicModel: self::str('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
+            aiTimeout: self::int('AI_TIMEOUT', 5),
+            logReportRecipient: self::str('LOG_REPORT_RECIPIENT', ''),
+            anomalyScoreThreshold: self::int('ANOMALY_SCORE_THRESHOLD', 70),
+            securityAlertRecipient: self::str('SECURITY_ALERT_RECIPIENT', ''),
+            anomalyAlertCooldown: self::int('ANOMALY_ALERT_COOLDOWN', 1800),
         );
     }
 
     public function isProduction(): bool
     {
         return $this->appEnv === 'production';
+    }
+
+    /**
+     * 보안 알림/리포트 수신자를 해석한다 — 전용 SECURITY_ALERT_RECIPIENT 를 우선하고,
+     * 비어 있으면 LOG_REPORT_RECIPIENT 로 폴백한다. 둘 다 비면 빈 문자열(발송 스킵).
+     */
+    public function resolvedSecurityRecipient(): string
+    {
+        return $this->securityAlertRecipient !== '' ? $this->securityAlertRecipient : $this->logReportRecipient;
     }
 
     private static function str(string $key, string $default): string

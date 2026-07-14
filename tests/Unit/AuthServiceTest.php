@@ -6,6 +6,7 @@ namespace Tests\Unit;
 
 use App\Domain\JwtAlgorithm;
 use App\Domain\Request\LoginRequest;
+use App\Domain\Security\LoginContext;
 use App\Exception\EmailNotVerifiedException;
 use App\Exception\InvalidCredentialsException;
 use App\Exception\InvalidTokenException;
@@ -15,7 +16,9 @@ use App\Repository\UserRepositoryInterface;
 use App\Service\AuthService;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
+use App\Support\Jwks;
 use App\Support\JwtIssuer;
+use App\Support\Queue\QueueInterface;
 use DateTimeImmutable;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
@@ -53,7 +56,7 @@ final class AuthServiceTest extends TestCase
             appBaseUrl: 'http://localhost:9300/',
         );
         $jwtConfig = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
-        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);
+        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock, new Jwks($config));
     }
 
     public function testLoginIssuesTokenPairAndUpdatesLastLogin(): void
@@ -66,7 +69,7 @@ final class AuthServiceTest extends TestCase
         $tokens->expects(self::once())->method('store');
 
         $pair = $this->service($users, $tokens)
-            ->login(new LoginRequest('user@aivance.test', self::PASSWORD));
+            ->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
 
         self::assertNotSame('', $pair->accessToken);
         self::assertNotSame('', $pair->refreshToken);
@@ -80,7 +83,7 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(InvalidCredentialsException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', 'wrong'));
+        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', 'wrong'), $this->context());
     }
 
     public function testLoginWithUnknownEmailThrows(): void
@@ -90,7 +93,7 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(InvalidCredentialsException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('nobody@aivance.test', self::PASSWORD));
+        $this->service($users, $tokens)->login(new LoginRequest('nobody@aivance.test', self::PASSWORD), $this->context());
     }
 
     public function testLoginWithUnverifiedEmailThrows(): void
@@ -100,7 +103,51 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(EmailNotVerifiedException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', self::PASSWORD));
+        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
+    }
+
+    public function testLoginPushesSuccessEventToQueue(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findActiveByEmail')->willReturn($this->userRow());
+        $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
+
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->expects(self::once())->method('push')->with(
+            AuthService::LOGIN_EVENT_QUEUE,
+            self::callback(static function (array $payload): bool {
+                // 민감정보(비밀번호·토큰)는 절대 담기지 않아야 한다
+                return $payload['email'] === 'user@aivance.test'
+                    && $payload['ip'] === '203.0.113.7'
+                    && $payload['success'] === true
+                    && !isset($payload['password'])
+                    && !isset($payload['access_token']);
+            }),
+        );
+
+        $this->service($users, $tokens, $queue)
+            ->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
+    }
+
+    public function testLoginPushesFailureEventToQueue(): void
+    {
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findActiveByEmail')->willReturn($this->userRow());
+        $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
+
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->expects(self::once())->method('push')->with(
+            AuthService::LOGIN_EVENT_QUEUE,
+            self::callback(static fn (array $payload): bool => $payload['success'] === false),
+        );
+
+        try {
+            $this->service($users, $tokens, $queue)
+                ->login(new LoginRequest('user@aivance.test', 'wrong'), $this->context());
+            self::fail('실패한 로그인은 예외를 던져야 한다');
+        } catch (InvalidCredentialsException) {
+            // 기대된 예외 — 이벤트 push 검증은 위 expects() 로 수행
+        }
     }
 
     public function testRefreshRotatesTokens(): void
@@ -197,11 +244,24 @@ final class AuthServiceTest extends TestCase
     private function service(
         UserRepositoryInterface $users,
         RefreshTokenRepositoryInterface $tokens,
+        ?QueueInterface $queue = null,
     ): AuthService {
         $db = $this->createMock(ConnectionInterface::class);
         $db->method('transaction')->willReturnCallback(static fn (callable $work): mixed => $work());
 
-        return new AuthService($users, $tokens, $this->issuer, $this->clock, $db);
+        return new AuthService(
+            $users,
+            $tokens,
+            $this->issuer,
+            $this->clock,
+            $db,
+            $queue ?? $this->createMock(QueueInterface::class),
+        );
+    }
+
+    private function context(): LoginContext
+    {
+        return new LoginContext('203.0.113.7', 'TestAgent/1.0');
     }
 
     /**

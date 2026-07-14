@@ -58,12 +58,15 @@ DB_USER=aitessera
 DB_PASS=<DB 비밀번호>
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
-JWT_SECRET=<32자 이상 랜덤 문자열>
+JWT_ALGO=HS256            # 서명 알고리즘: HS256(대칭키) 또는 RS256(비대칭키)
+JWT_SECRET=<32자 이상 랜덤 문자열>   # HS256 사용 시 필수
 JWT_ACCESS_TTL=900        # Access 토큰 15분
 JWT_REFRESH_TTL=1209600   # Refresh 토큰 14일
 ```
 
 > 시크릿은 **절대 저장소에 커밋하지 않는다.** 운영은 AWS SSM / Secrets Manager 를 사용한다.
+>
+> RS256(비대칭키)으로 전환하려면 아래 [JWT 서명 키](#jwt-서명-키-rs256) 를 참고한다.
 
 ### Redis 실행
 
@@ -123,6 +126,51 @@ curl -X POST http://localhost:9300/api/v1/tokens \
   -d '{"email":"admin@aivance.test","password":"password1234!"}'
 ```
 
+### JWT 서명 키 (RS256)
+
+기본 서명 알고리즘은 **HS256**(대칭키)이며 `JWT_SECRET` 하나로 서명·검증한다.
+발급자(개인키)와 검증자(공개키)를 분리하려면 **RS256**(비대칭키)으로 전환한다.
+
+RSA 키페어를 생성한다(기본 `var/keys/` 에 생성 · 개인키는 자동으로 `0600` 권한):
+
+```bash
+php bin/console jwt:keygen           # var/keys/jwt_{private,public}.pem 생성
+php bin/console jwt:keygen --force    # 기존 키가 있어도 덮어쓰기
+```
+
+생성 후 안내된 값을 `.env` 에 설정한다:
+
+```env
+JWT_ALGO=RS256
+JWT_PRIVATE_KEY_PATH=var/keys/jwt_private.pem   # 서명(발급)용 개인키
+JWT_PUBLIC_KEY_PATH=var/keys/jwt_public.pem     # 검증용 공개키
+# JWT_PRIVATE_KEY_PASSPHRASE=                    # 개인키에 암호가 걸려 있을 때만
+```
+
+> - **개인키는 절대 커밋하지 않는다.** `var/keys/` · `*.pem` 은 `.gitignore` 로 차단되어 있다.
+> - 운영은 키페어를 저장소가 아니라 **AWS SSM Parameter Store / Secrets Manager** 로 배치하고 경로만 지정한다.
+> - `JWT_ALGO=RS256` 인데 키 파일을 읽을 수 없으면 **부팅 시 즉시 실패**(fail-fast)한다.
+> - Access 토큰은 15분 단기라 HS256↔RS256 전환 시 기존 토큰 영향이 거의 없다.
+
+#### JWKS — 공개키 자동 확인 (외부 검증자용)
+
+RS256 공개키를 외부 서비스가 **자동으로 내려받아 검증**할 수 있도록 JWKS(JSON Web Key
+Set · RFC 7517) 엔드포인트를 제공한다. 공개키 파일을 수동 배포할 필요가 없다.
+
+```bash
+curl http://localhost:9300/.well-known/jwks.json   # 표준 well-known 경로
+curl http://localhost:9300/api/v1/jwks.json         # 버전 경로 별칭 (동일 응답)
+```
+
+```json
+{ "keys": [ { "kty": "RSA", "use": "sig", "alg": "RS256", "kid": "…", "n": "…", "e": "AQAB" } ] }
+```
+
+> - 발급 토큰 헤더에는 공개키에서 파생한 `kid`(RFC 7638 thumbprint)가 실려, 소비자가 JWKS 의
+>   여러 키 중 검증 키를 매칭·회전할 수 있다.
+> - **HS256(대칭키)에서는 시크릿을 절대 노출하지 않고 빈 키셋(`{"keys":[]}`)을 반환**한다.
+> - 응답은 `application/jwk-set+json` · `Cache-Control: public, max-age=3600` 로 캐시 가능하다.
+
 ### 개발 서버 · 큐 워커
 
 ```bash
@@ -142,7 +190,7 @@ composer analyse    # PHPStan (level 8)
 composer cs-fix     # PHP-CS-Fixer 자동 정렬
 composer cs-check   # PHP-CS-Fixer dry-run
 composer check      # cs-check + analyse + test 순차 실행
-php bin/console <command>   # CLI (migrate·rollback·seed:run)
+php bin/console <command>   # CLI (migrate·rollback·seed:run·jwt:keygen·mail:work·log:work·security:scan·report:daily·report:security)
 ```
 
 ---
@@ -247,7 +295,9 @@ curl -X POST http://localhost:9300/api/v1/tokens \
 - **회전(rotation)** — Refresh 사용 시 이전 토큰 폐기 + 새 토큰 발급(트랜잭션)
 - **재사용 감지** — 이미 폐기된 Refresh 토큰이 다시 제시되면 탈취로 간주하고
   해당 사용자의 **모든 토큰을 무효화**
-- 알고리즘 HS256 고정(`alg:none` 우회 차단), 비밀번호 `password_hash()`(Argon2id)
+- 서명 알고리즘 **HS256(기본)/RS256 선택**(`JWT_ALGO`) · 검증 시 알고리즘 고정으로 `alg:none` 우회 차단
+  — RS256 설정은 [JWT 서명 키](#jwt-서명-키-rs256) 참고
+- 비밀번호 `password_hash()`(Argon2id)
 
 ### 에러 코드
 
@@ -318,3 +368,39 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - [x] RateLimit 미들웨어 (brute-force 방어)
 - [x] Swagger UI (`/api/docs`)
 - [x] 로그 수집 파이프라인 (큐 컨슈머)
+- [x] AI 로그 자동 분류·요약 — `log:work` 컨슈머가 error/critical 로그를 Claude API 로 분류·요약 (#50)
+- [x] AI 일일 이상징후 리포트 — `report:daily` 가 로그를 집계·분석해 메일 큐로 발송 (#51)
+- [x] AI 로그인 이상 탐지 — `security:scan` 이 로그인 이벤트를 규칙 + AI 로 스코어링 (#52)
+- [x] 로그인 이상 알림/리포트 — 임계값 초과 시 실시간 메일 알림(계정+IP 쿨다운) + `report:security` 일일 보안 요약
+
+> AI 기능은 요청 사이클 밖(큐 컨슈머·스케줄러)에서만 동작하며, `ANTHROPIC_API_KEY` 미설정 시
+> 규칙 기반으로 동작(이상 탐지)하거나 건너뛴다(분류·리포트). 관련 `.env` 키는 `.env.example` 의
+> `AI 로그 분류` 섹션 참고. CLI: `php bin/console log:work | report:daily | security:scan | report:security`.
+> 보안 알림/리포트 수신자는 `SECURITY_ALERT_RECIPIENT`(미설정 시 `LOG_REPORT_RECIPIENT` 폴백)로 설정한다.
+
+### 운영 활성화 — 로그인 이상 알림·보안 리포트
+
+로그인 이상 탐지 결과를 메일로 받으려면 **수신자 설정 + 워커 주기 실행 + 메일 큐 소비** 세 가지를 갖춘다.
+워커는 모두 "큐를 비우고 종료"하는 원샷 방식이라 cron/systemd timer 로 주기 기동한다.
+
+1. **수신자 설정** — `.env` 에 아래를 추가한다. 비우면 발송을 건너뛴다(무설정 시 안전).
+
+   ```env
+   SECURITY_ALERT_RECIPIENT=soc@example.com   # 미설정 시 LOG_REPORT_RECIPIENT 로 폴백
+   ANOMALY_ALERT_COOLDOWN=1800                # 실시간 알림 쿨다운(초), 기본 30분
+   # ANTHROPIC_API_KEY=...                    # 있으면 일일 리포트를 AI 서술, 없으면 통계 폴백
+   ```
+
+2. **워커 주기 실행 (cron 예시)** — 실시간 알림은 `security:scan`(로그인 이벤트 스코어링) 단계에서
+   임계값 초과 시 메일 큐에 적재되고, 일일 요약은 `report:security` 가 하루 1회 생성한다. 두 워커가
+   적재한 메일은 `mail:work` 가 실제 발송한다.
+
+   ```cron
+   * * * * *   cd /srv/aitessera && php bin/console security:scan   # 실시간 이상 스코어링·알림 적재
+   */2 * * * * cd /srv/aitessera && php bin/console mail:work        # 메일 큐 발송(알림·리포트 공용)
+   10 9 * * *  cd /srv/aitessera && php bin/console report:security  # 전일 보안 요약 리포트(하루 1회)
+   ```
+
+3. **동작 원리** — 같은 계정+IP 의 실시간 알림은 `ANOMALY_ALERT_COOLDOWN` 내 최초 1회만 발송해
+   brute-force 시 메일 폭주를 막는다(Redis `SET NX EX`). 임계값 초과 이벤트는 `var/logs/security/`
+   에도 계속 append 되므로, 메일 미설정 환경에서도 파일 감사는 그대로 유지된다.

@@ -11,6 +11,7 @@ use App\Exception\UnauthorizedException;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\UnencryptedToken;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
+use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Lcobucci\JWT\Validation\RequiredConstraintsViolated;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -22,8 +23,9 @@ use Throwable;
 /**
  * `Authorization: Bearer` 토큰을 검증하고 사용자 ID·회원구분을 요청 애트리뷰트에 주입한다.
  *
- * 검증 제약: 서명(SignedWith, 알고리즘 고정) + 만료(isExpired) 를 모두 확인한다.
+ * 검증 제약: 서명(SignedWith, 알고리즘 고정) + 시간 클레임(StrictValidAt: iat·nbf·exp) 을 모두 확인한다.
  * `alg:none` 우회는 SignedWith 가 서명 알고리즘을 지정된 signer 로 고정함으로써 차단된다.
+ * 만료(exp)는 TOKEN_EXPIRED 로 별도 매핑하기 위해 StrictValidAt 이전에 isExpired 로 먼저 확인한다.
  *
  * 주입 애트리뷰트: `userId`(int), `role`(UserRole). `role` 은 인가(RoleGuardMiddleware)의 기준값이다.
  * 공개 경로(PUBLIC_ROUTES)는 검증 없이 통과시킨다.
@@ -50,6 +52,8 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
         ['POST', '/api/v1/logs'],
         ['GET', '/api/docs'],
         ['GET', '/api/v1/openapi.json'],
+        ['GET', '/.well-known/jwks.json'],
+        ['GET', '/api/v1/jwks.json'],
     ];
 
     public function __construct(
@@ -117,8 +121,21 @@ final readonly class JwtAuthMiddleware implements MiddlewareInterface
             throw new InvalidTokenException();
         }
 
+        // 만료(exp)는 TOKEN_EXPIRED 로 구분 매핑하기 위해 먼저 확인한다.
+        // (StrictValidAt 도 exp 를 검사하지만 위반 종류를 구분해 던지지 않으므로 분리한다.)
         if ($token->isExpired($this->clock->now())) {
             throw new TokenExpiredException();
+        }
+
+        // iat(미래 발급)·nbf(미도래) 시간 클레임을 lcobucci 표준 제약으로 검증한다.
+        // StrictValidAt 은 iat·nbf·exp 존재를 모두 요구한다(발급기 JwtIssuer 가 셋 다 설정).
+        try {
+            $this->jwtConfig->validator()->assert(
+                $token,
+                new StrictValidAt($this->clock),
+            );
+        } catch (RequiredConstraintsViolated) {
+            throw new InvalidTokenException();
         }
 
         $sub = $token->claims()->get('sub');

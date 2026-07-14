@@ -49,6 +49,57 @@ final class ProcessMailQueueTest extends TestCase
         ]);
     }
 
+    public function testDispatchSendsDailyLogReport(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::once())->method('sendReport')
+            ->with('ops@aivance.test', '[AITessera] 일일 로그 리포트 (2026-07-12)', '리포트 본문');
+
+        $this->worker($mailer)->dispatch([
+            'type' => 'daily_log_report',
+            'to' => 'ops@aivance.test',
+            'subject' => '[AITessera] 일일 로그 리포트 (2026-07-12)',
+            'body' => '리포트 본문',
+        ]);
+    }
+
+    public function testDispatchSendsDailySecurityReport(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::once())->method('sendReport')
+            ->with('soc@aivance.test', '[AITessera] 일일 보안 리포트 (2026-07-12)', '보안 리포트 본문');
+
+        $this->worker($mailer)->dispatch([
+            'type' => 'daily_security_report',
+            'to' => 'soc@aivance.test',
+            'subject' => '[AITessera] 일일 보안 리포트 (2026-07-12)',
+            'body' => '보안 리포트 본문',
+        ]);
+    }
+
+    public function testDispatchSendsLoginAnomalyAlert(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::once())->method('sendReport')
+            ->with('soc@aivance.test', '[AITessera] 로그인 이상 감지 (점수 90) — victim@x.test', '알림 본문');
+
+        $this->worker($mailer)->dispatch([
+            'type' => 'login_anomaly_alert',
+            'to' => 'soc@aivance.test',
+            'subject' => '[AITessera] 로그인 이상 감지 (점수 90) — victim@x.test',
+            'body' => '알림 본문',
+        ]);
+    }
+
+    public function testDailyLogReportWithMissingFieldsIsIgnored(): void
+    {
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->expects(self::never())->method('sendReport');
+
+        // subject·body 누락 → 발송하지 않는다
+        $this->worker($mailer)->dispatch(['type' => 'daily_log_report', 'to' => 'ops@aivance.test']);
+    }
+
     public function testUnknownJobTypeIsIgnored(): void
     {
         $mailer = $this->createMock(MailerInterface::class);

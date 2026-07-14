@@ -6,14 +6,31 @@ use App\Domain\JwtAlgorithm;
 use App\Middleware\RateLimitMiddleware;
 use App\Repository\EmailVerificationRepository;
 use App\Repository\EmailVerificationRepositoryInterface;
+use App\Repository\LoginEventRepository;
+use App\Repository\LoginEventRepositoryInterface;
 use App\Repository\LogRepository;
 use App\Repository\LogRepositoryInterface;
 use App\Repository\RefreshTokenRepository;
 use App\Repository\RefreshTokenRepositoryInterface;
 use App\Repository\UserRepository;
 use App\Repository\UserRepositoryInterface;
+use App\Support\Ai\ClaudeLogAiClassifier;
+use App\Support\Ai\ClaudeLoginAnomalyScorer;
+use App\Support\Ai\ClaudeLogReportWriter;
+use App\Support\Ai\ClaudeSecurityReportWriter;
+use App\Support\Ai\LogAiClassifierInterface;
+use App\Support\Ai\LoginAnomalyScorerInterface;
+use App\Support\Ai\LogReportWriterInterface;
+use App\Support\Ai\NullLogAiClassifier;
+use App\Support\Ai\NullLogReportWriter;
+use App\Support\Ai\NullSecurityReportWriter;
+use App\Support\Ai\RuleLoginAnomalyScorer;
+use App\Support\Ai\SecurityReportWriterInterface;
 use App\Support\Config;
 use App\Support\ConnectionInterface;
+use App\Support\Cooldown\CooldownInterface;
+use App\Support\Cooldown\InMemoryCooldown;
+use App\Support\Cooldown\RedisCooldown;
 use App\Support\Database;
 use App\Support\Mail\LogMailer;
 use App\Support\Mail\MailerInterface;
@@ -63,6 +80,7 @@ return [
     RefreshTokenRepositoryInterface::class => autowire(RefreshTokenRepository::class),
     EmailVerificationRepositoryInterface::class => autowire(EmailVerificationRepository::class),
     LogRepositoryInterface::class => autowire(LogRepository::class),
+    LoginEventRepositoryInterface::class => autowire(LoginEventRepository::class),
 
     // 큐 — 테스트는 인메모리(무-Redis), 그 외 Redis 리스트
     QueueInterface::class => factory(static function (Config $config, RedisClient $redis): QueueInterface {
@@ -71,6 +89,53 @@ return [
 
     // 메일러 — 개발용 로그 구현 (운영은 symfony/mailer SMTP 로 교체)
     MailerInterface::class => autowire(LogMailer::class),
+
+    // 로그 AI 분류기 — 테스트이거나 API 키가 없으면 무동작(Null), 그 외 Claude API 구현.
+    // 이렇게 두면 CI·로컬은 외부 호출 없이 동작하고, 운영은 키만 주입하면 실제 분류가 켜진다.
+    LogAiClassifierInterface::class => factory(static function (Config $config): LogAiClassifierInterface {
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return new NullLogAiClassifier();
+        }
+
+        return new ClaudeLogAiClassifier($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
+
+    // 일일 로그 리포트 작성기 — 테스트이거나 API 키가 없으면 무동작(Null), 그 외 Claude API 구현.
+    // Null 을 받으면 워커가 통계 기반 폴백 리포트로 발송한다(외부 호출 없이도 파이프라인 동작).
+    LogReportWriterInterface::class => factory(static function (Config $config): LogReportWriterInterface {
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return new NullLogReportWriter();
+        }
+
+        return new ClaudeLogReportWriter($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
+
+    // 로그인 이상 스코어러(하이브리드) — 규칙 기반이 항상 기준선이고, API 키가 있으면 Claude 가
+    // 규칙 신호를 근거로 종합 점수를 정교화한다(실패 시 규칙 폴백). 테스트·키없음은 규칙만 사용.
+    LoginAnomalyScorerInterface::class => factory(static function (Config $config): LoginAnomalyScorerInterface {
+        $rule = new RuleLoginAnomalyScorer();
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return $rule;
+        }
+
+        return new ClaudeLoginAnomalyScorer($config->anthropicApiKey, $config->anthropicModel, $rule, $config->aiTimeout);
+    }),
+
+    // 일일 보안 리포트 작성기 — 테스트이거나 API 키가 없으면 무동작(Null), 그 외 Claude API 구현.
+    // Null 을 받으면 워커가 통계 기반 폴백 리포트로 발송한다(외부 호출 없이도 파이프라인 동작).
+    SecurityReportWriterInterface::class => factory(static function (Config $config): SecurityReportWriterInterface {
+        if ($config->appEnv === 'testing' || $config->anthropicApiKey === '') {
+            return new NullSecurityReportWriter();
+        }
+
+        return new ClaudeSecurityReportWriter($config->anthropicApiKey, $config->anthropicModel, $config->aiTimeout);
+    }),
+
+    // 쿨다운(중복 억제) — 테스트는 인메모리(무-Redis), 그 외 Redis SET NX EX.
+    // 로그인 이상 실시간 알림의 계정+IP별 폭주 방지에 쓴다.
+    CooldownInterface::class => factory(static function (Config $config, RedisClient $redis): CooldownInterface {
+        return $config->appEnv === 'testing' ? new InMemoryCooldown() : new RedisCooldown($redis);
+    }),
 
     // 레이트 리밋 저장소 — 테스트는 인메모리(무-Redis), 그 외 Redis 캐시
     StorageInterface::class => factory(static function (Config $config, RedisClient $redis): StorageInterface {
@@ -115,20 +180,34 @@ return [
 
     // JWT (lcobucci) — 알고리즘별 서명 설정. 발급(JwtIssuer)·검증(JwtAuthMiddleware) 이
     // 이 단일 Configuration 을 공유하므로 키/알고리즘 불일치가 구조적으로 차단된다.
+    //
+    // Config 는 알고리즘에 따라 시크릿/키 경로가 빈 문자열일 수 있어(HS256 이면 키 경로 '',
+    // RS256 이면 secret '') 프로퍼티 타입이 일반 string 이다. InMemory 는 non-empty-string 을
+    // 요구하므로, 각 알고리즘 분기에서 실제로 필요한 값이 비어 있지 않음을 가드로 다시 확인해
+    // 타입을 좁힌다(Config::fromEnv() 의 fail-fast 를 DI 경계에서 방어적으로 재확인).
     JwtConfiguration::class => factory(static function (Config $config): JwtConfiguration {
-        return match ($config->jwtAlgo) {
+        if ($config->jwtAlgo === JwtAlgorithm::HS256) {
             // HS256: 대칭키(HMAC) — 서명·검증 동일 키
-            JwtAlgorithm::HS256 => JwtConfiguration::forSymmetricSigner(
-                new Sha256(),
-                InMemory::plainText($config->jwtSecret),
-            ),
-            // RS256: 비대칭키(RSA) — 개인키로 서명, 공개키로 검증
-            JwtAlgorithm::RS256 => JwtConfiguration::forAsymmetricSigner(
-                new RsaSha256(),
-                InMemory::file($config->jwtPrivateKeyPath, $config->jwtPrivateKeyPassphrase),
-                InMemory::file($config->jwtPublicKeyPath),
-            ),
-        };
+            $secret = $config->jwtSecret;
+            if ($secret === '') {
+                throw new RuntimeException('HS256 서명에는 JWT_SECRET 이 필요합니다.');
+            }
+
+            return JwtConfiguration::forSymmetricSigner(new Sha256(), InMemory::plainText($secret));
+        }
+
+        // RS256: 비대칭키(RSA) — 개인키로 서명, 공개키로 검증
+        $privateKeyPath = $config->jwtPrivateKeyPath;
+        $publicKeyPath = $config->jwtPublicKeyPath;
+        if ($privateKeyPath === '' || $publicKeyPath === '') {
+            throw new RuntimeException('RS256 서명에는 JWT_PRIVATE_KEY_PATH·JWT_PUBLIC_KEY_PATH 가 필요합니다.');
+        }
+
+        return JwtConfiguration::forAsymmetricSigner(
+            new RsaSha256(),
+            InMemory::file($privateKeyPath, $config->jwtPrivateKeyPassphrase),
+            InMemory::file($publicKeyPath),
+        );
     }),
 
     // FastRoute 디스패처 — 라우트 정의를 컴파일

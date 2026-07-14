@@ -24,6 +24,11 @@ final class LogMailer implements MailerInterface
         $this->write($to, '이메일 인증', "인증 링크: {$verificationLink}");
     }
 
+    public function sendReport(string $to, string $subject, string $body): void
+    {
+        $this->write($to, $subject, $body);
+    }
+
     private function write(string $to, string $subject, string $body): void
     {
         if (!is_dir($this->logDir)) {

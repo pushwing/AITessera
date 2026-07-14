@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Domain\Ai\LogAiInput;
+use App\Domain\Ai\LogAiResult;
 use App\Repository\LogRepositoryInterface;
 use App\Service\LogService;
+use App\Support\Ai\LogAiClassifierInterface;
 use App\Support\Queue\QueueInterface;
 use DateTimeImmutable;
 use RuntimeException;
@@ -15,19 +18,24 @@ use Throwable;
  * 로그 큐 컨슈머 — `log_queue` 를 비우며 각 로그를 처리한다.
  *
  * 1. 원시 로그 → var/logs/raw/raw-YYYY-MM-DD.log 에 append (감사·재처리 보존)
- * 2. 가공 후 client_logs 테이블 INSERT
- * 3. 처리 실패 → var/logs/queue-failed/failed-YYYY-MM-DD.log (dead-letter)
+ * 2. error/critical 로그는 배치로 AI 분류·요약 (카테고리·한 줄 요약)
+ * 3. 가공 후 client_logs 테이블 INSERT
+ * 4. 처리 실패 → var/logs/queue-failed/failed-YYYY-MM-DD.log (dead-letter)
  *
  * `bin/console log:work` 로 실행하며 cron / systemd timer 로 주기 기동한다.
  */
 final readonly class ProcessLogQueue
 {
+    /** AI 분류 대상 로그 레벨 (비용·부하 통제를 위해 심각 로그만 호출). */
+    private const array AI_LEVELS = ['error', 'critical'];
+
     private string $rawDir;
     private string $deadLetterDir;
 
     public function __construct(
         private QueueInterface $queue,
         private LogRepositoryInterface $logs,
+        private LogAiClassifierInterface $classifier,
         ?string $rawDir = null,
         ?string $deadLetterDir = null,
     ) {
@@ -38,26 +46,69 @@ final readonly class ProcessLogQueue
 
     /**
      * 큐가 빌 때까지 처리하고 처리 건수를 반환한다.
+     *
+     * AI 분류는 건별이 아니라 드레인한 전체에서 error/critical 만 모아 한 번에 호출한다
+     * (건별 호출 금지 · 비용/부하 통제).
      */
     public function run(): int
     {
-        $processed = 0;
+        $jobs = [];
         while (($job = $this->queue->pop(LogService::LOG_QUEUE)) !== null) {
-            $this->handle($job);
-            ++$processed;
+            $jobs[] = $job;
+        }
+        if ($jobs === []) {
+            return 0;
         }
 
-        return $processed;
+        $aiResults = $this->classify($jobs);
+
+        foreach ($jobs as $i => $job) {
+            $this->handle($job, $aiResults[$i] ?? null);
+        }
+
+        return count($jobs);
+    }
+
+    /**
+     * error/critical 로그만 골라 한 번의 배치 호출로 AI 분류한다.
+     *
+     * 외부 API 실패는 여기서 흡수해 빈 결과를 반환한다 — 로그 저장은 계속되어야 하므로
+     * AI 실패가 파이프라인을 중단시키지 않는다(graceful degradation).
+     *
+     * @param list<array<array-key, mixed>> $jobs
+     *
+     * @return array<int, LogAiResult> 원본 인덱스 → 분류 결과
+     */
+    private function classify(array $jobs): array
+    {
+        $inputs = [];
+        foreach ($jobs as $i => $job) {
+            $level = $job['level'] ?? null;
+            $message = $job['message'] ?? null;
+            if (is_string($level) && in_array($level, self::AI_LEVELS, true)
+                && is_string($message) && $message !== '') {
+                $inputs[$i] = new LogAiInput($level, $message);
+            }
+        }
+        if ($inputs === []) {
+            return [];
+        }
+
+        try {
+            return $this->classifier->classify($inputs);
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**
      * @param array<array-key, mixed> $job
      */
-    public function handle(array $job): void
+    public function handle(array $job, ?LogAiResult $ai = null): void
     {
         try {
             $this->writeRaw($job);
-            $this->store($job);
+            $this->store($job, $ai);
         } catch (Throwable $e) {
             $this->deadLetter($job, $e);
         }
@@ -75,7 +126,7 @@ final readonly class ProcessLogQueue
     /**
      * @param array<array-key, mixed> $job
      */
-    private function store(array $job): void
+    private function store(array $job, ?LogAiResult $ai): void
     {
         $level = $job['level'] ?? null;
         $message = $job['message'] ?? null;
@@ -94,6 +145,8 @@ final readonly class ProcessLogQueue
             source: is_string($sourceRaw) && $sourceRaw !== '' ? $sourceRaw : null,
             userId: is_int($userIdRaw) ? $userIdRaw : null,
             loggedAt: $this->normalizeDate($job['logged_at'] ?? null),
+            aiCategory: $ai?->category,
+            aiSummary: $ai?->summary,
         );
     }
 

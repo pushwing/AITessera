@@ -7,6 +7,7 @@ namespace Tests\Unit;
 use App\Domain\JwtAlgorithm;
 use App\Domain\UserRole;
 use App\Support\Config;
+use App\Support\Jwks;
 use App\Support\JwtIssuer;
 use DateTimeImmutable;
 use Lcobucci\JWT\Configuration;
@@ -44,7 +45,7 @@ final class JwtIssuerTest extends TestCase
             appBaseUrl: 'http://localhost:9300/',
         );
         $jwtConfig = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
-        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock);
+        $this->issuer = new JwtIssuer($jwtConfig, $config, $this->clock, new Jwks($config));
     }
 
     public function testAccessTokenCarriesSubjectAffiliationAndRole(): void
@@ -58,6 +59,20 @@ final class JwtIssuerTest extends TestCase
         self::assertSame('42', $token->claims()->get('sub'));
         self::assertSame('aivance', $token->claims()->get('aff'));
         self::assertSame(UserRole::Operator->value, (int) $token->claims()->get('role'));
+    }
+
+    public function testAccessTokenCarriesTimeClaimsForStrictValidation(): void
+    {
+        // 검증 측 StrictValidAt 은 iat·nbf·exp 존재를 모두 요구한다 — 발급기가 셋 다 넣어야 한다.
+        $jwt = $this->issuer->issueAccessToken(42, 'aivance', UserRole::Member);
+
+        $config = Configuration::forSymmetricSigner(new Sha256(), InMemory::plainText(self::JWT_SECRET));
+        $token = $config->parser()->parse($jwt);
+        self::assertInstanceOf(UnencryptedToken::class, $token);
+
+        self::assertTrue($token->claims()->has('iat'));
+        self::assertTrue($token->claims()->has('nbf'));
+        self::assertTrue($token->claims()->has('exp'));
     }
 
     public function testRefreshTokenHashIsDeterministicSha256(): void

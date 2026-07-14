@@ -2,4 +2,5 @@ parameters:
     level: 8
     paths:
         - src
+        - config
     tmpDir: var/cache/phpstan

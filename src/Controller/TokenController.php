@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Domain\Request\LoginRequest;
+use App\Domain\Security\LoginContext;
 use App\Domain\TokenPair;
 use App\Exception\ValidationException;
 use App\Service\AuthService;
@@ -43,9 +44,25 @@ final class TokenController extends BaseController
     public function issue(ServerRequestInterface $request): ResponseInterface
     {
         $dto = LoginRequest::fromArray($this->jsonInput($request));
-        $pair = $this->authService->login($dto);
+        $pair = $this->authService->login($dto, $this->loginContext($request));
 
         return $this->tokenResponse($pair, 201);
+    }
+
+    /**
+     * 이상 탐지용 요청 컨텍스트(IP·User-Agent)를 조립한다.
+     *
+     * REMOTE_ADDR 만 신뢰한다 — 프록시(X-Forwarded-For) 신뢰는 별도 설정이 필요하므로
+     * 여기서는 사용하지 않는다(RateLimitMiddleware 와 동일 정책).
+     */
+    private function loginContext(ServerRequestInterface $request): LoginContext
+    {
+        $ip = $request->getServerParams()['REMOTE_ADDR'] ?? null;
+
+        return new LoginContext(
+            is_string($ip) && $ip !== '' ? $ip : '0.0.0.0',
+            $request->getHeaderLine('User-Agent'),
+        );
     }
 
     #[OA\Post(
