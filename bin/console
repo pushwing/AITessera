@@ -7,6 +7,7 @@ declare(strict_types=1);
 // phinx 마이그레이션 위임 + 애플리케이션 커맨드(큐 컨슈머 등)를 지원한다.
 
 use App\Console\GenerateDailyLogReport;
+use App\Console\GenerateSecurityReport;
 use App\Console\ProcessLoginAnomaly;
 use App\Console\ProcessLogQueue;
 use App\Console\ProcessMailQueue;
@@ -45,6 +46,7 @@ $usage = static function (): int {
       log:work    로그 큐 컨슈머 (큐를 비우고 종료)
       security:scan 로그인 이벤트 큐 소비 → 이상 스코어링·기록 (큐를 비우고 종료)
       report:daily 전일 로그 집계 → AI 일일 리포트 생성 → 메일 큐 적재
+      report:security 전일 로그인 이벤트 보안 집계 → AI 보안 리포트 생성 → 메일 큐 적재
       jwt:keygen  RS256 서명용 RSA 키페어 생성 (--force 로 덮어쓰기)
 
     TXT);
@@ -125,6 +127,18 @@ $reportDaily = static function (): int {
     return 0;
 };
 
+$reportSecurity = static function (): int {
+    $worker = ContainerFactory::build()->get(GenerateSecurityReport::class);
+    assert($worker instanceof GenerateSecurityReport);
+    $count = $worker->run();
+    $message = $count > 0
+        ? '일일 보안 리포트를 메일 큐에 적재했습니다.'
+        : '수신자(SECURITY_ALERT_RECIPIENT·LOG_REPORT_RECIPIENT) 미설정 — 리포트 발송을 건너뜁니다.';
+    fwrite(STDOUT, $message . "\n");
+
+    return 0;
+};
+
 $exitCode = match ($command) {
     'migrate'          => $runPhinx(['migrate']),
     'rollback'         => $runPhinx(['rollback']),
@@ -133,6 +147,7 @@ $exitCode = match ($command) {
     'log:work'         => $logWork(),
     'security:scan'    => $securityScan(),
     'report:daily'     => $reportDaily(),
+    'report:security'  => $reportSecurity(),
     'jwt:keygen'       => $jwtKeygen($argv),
     'list', '--help', '-h' => $usage(),
     default            => (static function (string $c): int {

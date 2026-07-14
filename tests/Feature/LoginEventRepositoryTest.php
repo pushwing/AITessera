@@ -90,6 +90,48 @@ final class LoginEventRepositoryTest extends TestCase
         self::assertSame(0, $signals->failureCount);
     }
 
+    public function testAggregateForDateSummarizesAnomaliesWithinDay(): void
+    {
+        // 대상일(2026-07-12) 안: victim 실패 2·성공 1(3시도, 그중 1건 이상점수 88), attacker 실패 1
+        $vid1 = $this->repository->insert('victim@x.test', '10.0.0.1', null, false, '2026-07-12 09:00:00');
+        $this->repository->insert('victim@x.test', '10.0.0.1', null, false, '2026-07-12 09:01:00');
+        $this->repository->insert('victim@x.test', '10.0.0.2', null, true, '2026-07-12 09:02:00');
+        $this->repository->insert('attacker@x.test', '10.0.0.1', null, false, '2026-07-12 23:59:59');
+        $this->repository->updateScore($vid1, 88, '스터핑 의심');
+        // 경계 밖(다음날) — 집계에서 제외되어야 한다
+        $this->repository->insert('victim@x.test', '10.0.0.9', null, false, '2026-07-13 00:00:00');
+
+        $stats = $this->repository->aggregateForDate('2026-07-12', 70);
+
+        self::assertSame('2026-07-12', $stats->date);
+        self::assertSame(4, $stats->totalAttempts);
+        self::assertSame(3, $stats->failedAttempts);
+        self::assertSame(1, $stats->anomalyCount, '임계값 70 이상 이벤트는 1건');
+        self::assertSame(88, $stats->maxScore);
+
+        // 실패 상위 계정 1위는 victim(실패 2)
+        self::assertNotEmpty($stats->topAccounts);
+        self::assertSame('victim@x.test', $stats->topAccounts[0]['email']);
+        self::assertSame(2, $stats->topAccounts[0]['failures']);
+
+        // 시도 상위 IP 1위는 10.0.0.1 (3회)
+        self::assertNotEmpty($stats->topIps);
+        self::assertSame('10.0.0.1', $stats->topIps[0]['ip']);
+        self::assertSame(3, $stats->topIps[0]['attempts']);
+    }
+
+    public function testAggregateForDateReturnsZeroesWhenNoEvents(): void
+    {
+        $stats = $this->repository->aggregateForDate('2020-01-01', 70);
+
+        self::assertSame(0, $stats->totalAttempts);
+        self::assertSame(0, $stats->failedAttempts);
+        self::assertSame(0, $stats->anomalyCount);
+        self::assertSame(0, $stats->maxScore);
+        self::assertSame([], $stats->topAccounts);
+        self::assertSame([], $stats->topIps);
+    }
+
     /**
      * @return array<string, mixed>
      */

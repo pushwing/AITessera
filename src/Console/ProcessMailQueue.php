@@ -46,15 +46,20 @@ final readonly class ProcessMailQueue
 
         match ($type) {
             'email_verification' => $this->sendEmailVerification($job),
-            'daily_log_report' => $this->sendDailyLogReport($job),
+            // 리포트·알림 계열은 모두 to/subject/body 구조라 공통 발송 경로를 공유한다.
+            'daily_log_report',
+            'daily_security_report',
+            'login_anomaly_alert' => $this->sendReportEmail($job),
             default => null, // 알 수 없는 타입은 무시 (dead-letter 처리는 후속 작업)
         };
     }
 
     /**
+     * to/subject/body 를 갖는 리포트·알림 메일을 발송한다. 필드가 빠지면 조용히 무시한다.
+     *
      * @param array<array-key, mixed> $job
      */
-    private function sendDailyLogReport(array $job): void
+    private function sendReportEmail(array $job): void
     {
         $to = $job['to'] ?? null;
         $subject = $job['subject'] ?? null;
