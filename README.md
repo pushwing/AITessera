@@ -377,3 +377,30 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 > 규칙 기반으로 동작(이상 탐지)하거나 건너뛴다(분류·리포트). 관련 `.env` 키는 `.env.example` 의
 > `AI 로그 분류` 섹션 참고. CLI: `php bin/console log:work | report:daily | security:scan | report:security`.
 > 보안 알림/리포트 수신자는 `SECURITY_ALERT_RECIPIENT`(미설정 시 `LOG_REPORT_RECIPIENT` 폴백)로 설정한다.
+
+### 운영 활성화 — 로그인 이상 알림·보안 리포트
+
+로그인 이상 탐지 결과를 메일로 받으려면 **수신자 설정 + 워커 주기 실행 + 메일 큐 소비** 세 가지를 갖춘다.
+워커는 모두 "큐를 비우고 종료"하는 원샷 방식이라 cron/systemd timer 로 주기 기동한다.
+
+1. **수신자 설정** — `.env` 에 아래를 추가한다. 비우면 발송을 건너뛴다(무설정 시 안전).
+
+   ```env
+   SECURITY_ALERT_RECIPIENT=soc@example.com   # 미설정 시 LOG_REPORT_RECIPIENT 로 폴백
+   ANOMALY_ALERT_COOLDOWN=1800                # 실시간 알림 쿨다운(초), 기본 30분
+   # ANTHROPIC_API_KEY=...                    # 있으면 일일 리포트를 AI 서술, 없으면 통계 폴백
+   ```
+
+2. **워커 주기 실행 (cron 예시)** — 실시간 알림은 `security:scan`(로그인 이벤트 스코어링) 단계에서
+   임계값 초과 시 메일 큐에 적재되고, 일일 요약은 `report:security` 가 하루 1회 생성한다. 두 워커가
+   적재한 메일은 `mail:work` 가 실제 발송한다.
+
+   ```cron
+   * * * * *   cd /srv/aitessera && php bin/console security:scan   # 실시간 이상 스코어링·알림 적재
+   */2 * * * * cd /srv/aitessera && php bin/console mail:work        # 메일 큐 발송(알림·리포트 공용)
+   10 9 * * *  cd /srv/aitessera && php bin/console report:security  # 전일 보안 요약 리포트(하루 1회)
+   ```
+
+3. **동작 원리** — 같은 계정+IP 의 실시간 알림은 `ANOMALY_ALERT_COOLDOWN` 내 최초 1회만 발송해
+   brute-force 시 메일 폭주를 막는다(Redis `SET NX EX`). 임계값 초과 이벤트는 `var/logs/security/`
+   에도 계속 append 되므로, 메일 미설정 환경에서도 파일 감사는 그대로 유지된다.
