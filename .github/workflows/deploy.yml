@@ -20,6 +20,7 @@ jobs:
 
     steps:
       - name: 프로덕션 서버 SSH 배포
+        id: deploy_ssh
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -68,3 +69,31 @@ jobs:
             sudo -n systemctl reload apache2
 
             echo "✅ 배포 완료: $(git rev-parse --short HEAD)"
+
+      - name: Slack 알림 (성공)
+        if: success() && secrets.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          SHA_SHORT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload=$(jq -n \
+            --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
+            '{text: ("✅ *" + $repo + "* 배포 성공 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
+          curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+
+      - name: Slack 알림 (실패)
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          SHA_SHORT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          payload=$(jq -n \
+            --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
+            '{text: ("❌ *" + $repo + "* 배포 실패 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
+          curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
