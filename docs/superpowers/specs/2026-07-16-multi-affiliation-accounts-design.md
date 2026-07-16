@@ -40,7 +40,7 @@ ALTER TABLE users ADD UNIQUE INDEX uniq_users_email_active_affiliation (email_ac
 | 엔드포인트 | 변경 내용 |
 |---|---|
 | `POST /api/v1/tokens` (로그인) | `LoginRequest`에 `affiliation` 필드 추가(필수, `Affiliation` enum 검증) |
-| `POST /api/v1/register` (자가가입) | 기존에 이미 `affiliation`을 받음 — 중복 체크 스코프만 변경 |
+| `POST /api/v1/users` (자가가입) | 기존에 이미 `affiliation`을 받음 — 중복 체크 스코프만 변경 |
 | `POST /api/v1/operators` (운영자에 의한 계정 생성) | 중복 체크 스코프만 변경(운영자는 이미 자기 소속으로만 생성 가능) |
 | `POST /api/v1/users/verify/resend` (인증메일 재발송) | `affiliation` 필수 파라미터 추가(같은 이메일이 여러 소속에 미인증 상태로 있을 수 있어 모호성 제거) |
 
