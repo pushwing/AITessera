@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Domain\Affiliation;
 use App\Domain\JwtAlgorithm;
 use App\Domain\Request\LoginRequest;
 use App\Domain\Security\LoginContext;
@@ -62,14 +63,14 @@ final class AuthServiceTest extends TestCase
     public function testLoginIssuesTokenPairAndUpdatesLastLogin(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('findActiveByEmail')->willReturn($this->userRow());
+        $users->method('findActiveByEmail')->with('user@aivance.test', 'aivance')->willReturn($this->userRow());
         $users->expects(self::once())->method('updateLastLogin');
 
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
         $tokens->expects(self::once())->method('store');
 
         $pair = $this->service($users, $tokens)
-            ->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
+            ->login(new LoginRequest('user@aivance.test', self::PASSWORD, Affiliation::Aivance), $this->context());
 
         self::assertNotSame('', $pair->accessToken);
         self::assertNotSame('', $pair->refreshToken);
@@ -83,7 +84,7 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(InvalidCredentialsException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', 'wrong'), $this->context());
+        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', 'wrong', Affiliation::Aivance), $this->context());
     }
 
     public function testLoginWithUnknownEmailThrows(): void
@@ -93,7 +94,7 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(InvalidCredentialsException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('nobody@aivance.test', self::PASSWORD), $this->context());
+        $this->service($users, $tokens)->login(new LoginRequest('nobody@aivance.test', self::PASSWORD, Affiliation::Aivance), $this->context());
     }
 
     public function testLoginWithUnverifiedEmailThrows(): void
@@ -103,7 +104,19 @@ final class AuthServiceTest extends TestCase
         $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
 
         $this->expectException(EmailNotVerifiedException::class);
-        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
+        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', self::PASSWORD, Affiliation::Aivance), $this->context());
+    }
+
+    public function testLoginWithMismatchedAffiliationThrows(): void
+    {
+        // 이메일은 aivance 소속엔 없고 ailicet 소속에만 있는 상황 — findActiveByEmail이 조회한
+        // affiliation 인자에 대해 null을 반환하도록 스텁.
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('findActiveByEmail')->with('user@aivance.test', 'ailicet')->willReturn(null);
+        $tokens = $this->createMock(RefreshTokenRepositoryInterface::class);
+
+        $this->expectException(InvalidCredentialsException::class);
+        $this->service($users, $tokens)->login(new LoginRequest('user@aivance.test', self::PASSWORD, Affiliation::Ailicet), $this->context());
     }
 
     public function testLoginPushesSuccessEventToQueue(): void
@@ -126,7 +139,7 @@ final class AuthServiceTest extends TestCase
         );
 
         $this->service($users, $tokens, $queue)
-            ->login(new LoginRequest('user@aivance.test', self::PASSWORD), $this->context());
+            ->login(new LoginRequest('user@aivance.test', self::PASSWORD, Affiliation::Aivance), $this->context());
     }
 
     public function testLoginPushesFailureEventToQueue(): void
@@ -143,7 +156,7 @@ final class AuthServiceTest extends TestCase
 
         try {
             $this->service($users, $tokens, $queue)
-                ->login(new LoginRequest('user@aivance.test', 'wrong'), $this->context());
+                ->login(new LoginRequest('user@aivance.test', 'wrong', Affiliation::Aivance), $this->context());
             self::fail('실패한 로그인은 예외를 던져야 한다');
         } catch (InvalidCredentialsException) {
             // 기대된 예외 — 이벤트 push 검증은 위 expects() 로 수행

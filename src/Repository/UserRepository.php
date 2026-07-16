@@ -30,14 +30,14 @@ final readonly class UserRepository implements UserRepositoryInterface
     {
     }
 
-    public function findActiveByEmail(string $email): ?array
+    public function findActiveByEmail(string $email, string $affiliation): ?array
     {
         $stmt = $this->db->pdo()->prepare(
             'SELECT ' . self::COLUMNS . ' FROM users
-             WHERE email = :email AND is_active = 1 AND deleted_at IS NULL
+             WHERE email = :email AND affiliation = :affiliation AND is_active = 1 AND deleted_at IS NULL
              LIMIT 1',
         );
-        $stmt->execute(['email' => $email]);
+        $stmt->execute(['email' => $email, 'affiliation' => $affiliation]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $row === false ? null : $row;

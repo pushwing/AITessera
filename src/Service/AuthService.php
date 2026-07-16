@@ -47,7 +47,7 @@ final readonly class AuthService
         // 성공/실패 어느 경로든 이상 탐지 이벤트를 큐에 적재한다(응답 지연 없이 push 만).
         // 스코어링은 워커가 비동기로 수행한다.
         try {
-            $row = $this->users->findActiveByEmail($request->email);
+            $row = $this->users->findActiveByEmail($request->email, $request->affiliation->value);
             if ($row === null) {
                 throw new InvalidCredentialsException();
             }

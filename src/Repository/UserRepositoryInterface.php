@@ -13,11 +13,13 @@ use DateTimeImmutable;
 interface UserRepositoryInterface
 {
     /**
-     * 로그인 가능한(활성·미삭제) 사용자를 이메일로 조회한다.
+     * 로그인 가능한(활성·미삭제) 사용자를 (이메일, 소속) 조합으로 조회한다.
+     *
+     * 동일 이메일이 소속별로 독립 계정을 가질 수 있으므로 affiliation까지 함께 매칭한다.
      *
      * @return array<string, mixed>|null
      */
-    public function findActiveByEmail(string $email): ?array;
+    public function findActiveByEmail(string $email, string $affiliation): ?array;
 
     /**
      * @return array<string, mixed>|null
