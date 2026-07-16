@@ -346,7 +346,8 @@ composer test
 
 - **CI** (`.github/workflows/ci.yml`) — `dev`·`main` push/PR 마다 MySQL·Redis 컨테이너를
   띄우고 `cs-check → PHPStan(level 8) → migrate → PHPUnit` 순차 검증
-- **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포
+- **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포, 완료 후 Slack 알림
+  (`SLACK_WEBHOOK_URL` 설정 시 성공/실패 모두 전송, 미설정 시 알림만 스킵)
 
 ### Git 워크플로우
 

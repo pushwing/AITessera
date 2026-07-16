@@ -195,6 +195,8 @@ $userId = (int) $request->getAttribute('userId');
 4. `php bin/console migrate` — 출력을 grep 검사해 예외 감지 시 `exit 1` 로 배포 중단
 5. 캐시 초기화 (OPcache / Redis 애플리케이션 캐시)
 6. `sudo -n systemctl reload apache2`(또는 `php-fpm`) — OPcache 갱신(무중단)
+7. **Slack 알림** — SSH 배포 스텝(1~6) 종료 후 GitHub Actions 러너에서 성공(`if: success()`)·
+   실패(`if: failure()`) 각각 별도 스텝으로 Incoming Webhook(`SLACK_WEBHOOK_URL`)에 결과 전송
 
 > **마이그레이션 함정**: DB 연결 실패·마이그레이션 예외가 나도 CLI 종료코드가 0 일 수 있다.
 > `set -e` 로 못 잡을 수 있으니 출력을 캡처해 예외 패턴(`[...Exception]`·`Unable to connect`·`Access denied`)을 직접 검사하고 실패 시 배포를 중단한다.
@@ -206,6 +208,9 @@ $userId = (int) $request->getAttribute('userId');
 ### 필요한 GitHub Secrets (`production` 환경)
 
 `DEPLOY_HOST` · `DEPLOY_USER` · `DEPLOY_SSH_KEY` · `DEPLOY_PORT` · `DEPLOY_PATH`
+
+- `SLACK_WEBHOOK_URL` (선택) — 설정 시 배포 성공/실패를 Slack Incoming Webhook 으로 알림.
+  미설정 시 알림 스텝은 자동 스킵되며 배포 자체에는 영향 없다.
 
 ### 서버 사전 준비 (한 번만)
 
