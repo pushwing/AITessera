@@ -113,10 +113,10 @@ final class MeJourneyTest extends TestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
 
         // 새 비밀번호로 로그인 가능, 기존 비밀번호로는 불가.
-        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => $newPassword]);
+        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => $newPassword, 'affiliation' => 'aivance']);
         self::assertSame(201, $login->getStatusCode(), (string) $login->getBody());
 
-        $oldLogin = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => self::PASSWORD]);
+        $oldLogin = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => self::PASSWORD, 'affiliation' => 'aivance']);
         self::assertSame(401, $oldLogin->getStatusCode());
     }
 
@@ -165,7 +165,7 @@ final class MeJourneyTest extends TestCase
         self::assertSame(204, $response->getStatusCode(), (string) $response->getBody());
 
         // 탈퇴 후에는 로그인이 불가능하다.
-        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => self::PASSWORD]);
+        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $email, 'password' => self::PASSWORD, 'affiliation' => 'aivance']);
         self::assertSame(401, $login->getStatusCode());
 
         // 동일 이메일로 재가입이 가능해야 한다(탈퇴 이메일은 점유 해제).
@@ -216,6 +216,7 @@ final class MeJourneyTest extends TestCase
         $login = $this->handle('POST', '/api/v1/tokens', [], [
             'email' => $email,
             'password' => self::PASSWORD,
+            'affiliation' => 'aivance',
         ]);
         self::assertSame(201, $login->getStatusCode(), (string) $login->getBody());
 
