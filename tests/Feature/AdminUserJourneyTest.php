@@ -193,7 +193,7 @@ final class AdminUserJourneyTest extends TestCase
         self::assertSame(200, $update->getStatusCode(), (string) $update->getBody());
 
         // 새 비밀번호로 로그인 가능해야 한다.
-        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $memberEmail, 'password' => $newPassword]);
+        $login = $this->handle('POST', '/api/v1/tokens', [], ['email' => $memberEmail, 'password' => $newPassword, 'affiliation' => 'aivance']);
         self::assertSame(201, $login->getStatusCode(), (string) $login->getBody());
     }
 
@@ -284,6 +284,7 @@ final class AdminUserJourneyTest extends TestCase
         $login = $this->handle('POST', '/api/v1/tokens', [], [
             'email' => $email,
             'password' => self::PASSWORD,
+            'affiliation' => 'aivance',
         ]);
         self::assertSame(201, $login->getStatusCode(), (string) $login->getBody());
 
