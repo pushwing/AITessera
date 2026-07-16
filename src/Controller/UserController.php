@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Domain\Affiliation;
 use App\Domain\Request\RegisterRequest;
 use App\Exception\ValidationException;
 use App\Service\UserService;
@@ -79,13 +80,14 @@ final class UserController extends BaseController
         tags: ['Users'],
         responses: [
             new OA\Response(response: 202, description: '재발송 요청 접수'),
-            new OA\Response(response: 422, description: 'email 누락 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 422, description: 'email/affiliation 누락 또는 형식 오류 (VALIDATION_ERROR)', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
         ],
     )]
     public function resend(ServerRequestInterface $request): ResponseInterface
     {
         $email = $this->requireStringField($request, 'email');
-        $this->userService->resendVerification($email);
+        $affiliation = $this->requireAffiliationField($request);
+        $this->userService->resendVerification($email, $affiliation->value);
 
         // 이메일 존재 여부를 노출하지 않도록 항상 202 로 응답한다.
         return $this->success(['message' => '인증 메일을 발송했습니다.'], statusCode: 202);
@@ -99,5 +101,16 @@ final class UserController extends BaseController
         }
 
         return $value;
+    }
+
+    private function requireAffiliationField(ServerRequestInterface $request): Affiliation
+    {
+        $value = $this->jsonInput($request)['affiliation'] ?? null;
+        $affiliation = is_string($value) ? Affiliation::tryFrom($value) : null;
+        if ($affiliation === null) {
+            throw new ValidationException(['affiliation 은(는) 필수이며 유효한 소속이어야 합니다.']);
+        }
+
+        return $affiliation;
     }
 }
