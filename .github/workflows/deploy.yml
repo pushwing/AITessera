@@ -71,7 +71,7 @@ jobs:
             echo "✅ 배포 완료: $(git rev-parse --short HEAD)"
 
       - name: Slack 알림 (성공)
-        if: success() && secrets.SLACK_WEBHOOK_URL != ''
+        if: success()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
@@ -79,13 +79,19 @@ jobs:
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # if 조건식에서는 secrets 컨텍스트를 참조할 수 없어(Unrecognized named-value),
+          # 미설정 시 스킵 여부는 스크립트 내부에서 판단한다.
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL 미설정 — Slack 알림 스킵"
+            exit 0
+          fi
           payload=$(jq -n \
             --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
             '{text: ("✅ *" + $repo + "* 배포 성공 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
           curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
 
       - name: Slack 알림 (실패)
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
@@ -93,6 +99,10 @@ jobs:
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL 미설정 — Slack 알림 스킵"
+            exit 0
+          fi
           payload=$(jq -n \
             --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
             '{text: ("❌ *" + $repo + "* 배포 실패 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
