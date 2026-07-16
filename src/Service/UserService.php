@@ -164,7 +164,7 @@ final readonly class UserService
      */
     public function register(RegisterRequest $request): int
     {
-        if ($this->users->emailExists($request->email)) {
+        if ($this->users->emailExists($request->email, $request->affiliation->value)) {
             throw new AlreadyExistsException('이미 가입된 이메일입니다.');
         }
 
@@ -223,7 +223,7 @@ final readonly class UserService
             throw new ForbiddenException('본인 소속의 계정만 생성할 수 있습니다.');
         }
 
-        if ($this->users->emailExists($request->email)) {
+        if ($this->users->emailExists($request->email, $request->affiliation->value)) {
             throw new AlreadyExistsException('이미 가입된 이메일입니다.');
         }
 

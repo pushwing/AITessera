@@ -33,7 +33,12 @@ interface UserRepositoryInterface
      */
     public function findProfileById(int $id): ?array;
 
-    public function emailExists(string $email): bool;
+    /**
+     * (이메일, 소속) 조합으로 활성 계정 존재 여부를 확인한다.
+     *
+     * 동일 이메일이 소속별로 독립 계정을 가질 수 있으므로 affiliation까지 함께 확인한다.
+     */
+    public function emailExists(string $email, string $affiliation): bool;
 
     /**
      * 신규 사용자를 생성하고 생성된 id 를 반환한다. 이메일 미인증 상태로 만든다.
