@@ -24,6 +24,9 @@
 .phpunit.cache/
 .phpunit.result.cache
 
+# superpowers subagent-driven-development 진행 로그(세션 스크래치)
+/.superpowers/
+
 # OS · 에디터
 .DS_Store
 

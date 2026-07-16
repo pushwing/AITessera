@@ -193,7 +193,7 @@ final class UserServiceTest extends TestCase
     public function testRegisterCreatesUserAndEnqueuesVerification(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('emailExists')->willReturn(false);
+        $users->method('emailExists')->with('user@aivance.test', 'aivance')->willReturn(false);
         $users->expects(self::once())->method('create')->willReturn(100);
 
         $verifications = $this->createMock(EmailVerificationRepositoryInterface::class);
@@ -215,7 +215,7 @@ final class UserServiceTest extends TestCase
     public function testRegisterWithDuplicateEmailThrows(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('emailExists')->willReturn(true);
+        $users->method('emailExists')->with('user@aivance.test', 'aivance')->willReturn(true);
         $users->expects(self::never())->method('create');
 
         $queue = $this->createMock(QueueInterface::class);
@@ -226,12 +226,40 @@ final class UserServiceTest extends TestCase
             ->register($this->registerRequest());
     }
 
+    public function testRegisterWithSameEmailDifferentAffiliationSucceeds(): void
+    {
+        // aivance엔 이미 있지만 ailicet엔 없는 이메일 — ailicet 가입은 성공해야 한다.
+        $users = $this->createMock(UserRepositoryInterface::class);
+        $users->method('emailExists')->with('user@aivance.test', 'ailicet')->willReturn(false);
+        $users->expects(self::once())->method('create')->willReturn(101);
+
+        $verifications = $this->createMock(EmailVerificationRepositoryInterface::class);
+        $verifications->expects(self::once())->method('store');
+
+        $queue = $this->createMock(QueueInterface::class);
+        $queue->expects(self::once())->method('push');
+
+        $request = new RegisterRequest(
+            email: 'user@aivance.test',
+            password: 'password1234!',
+            affiliation: Affiliation::Ailicet,
+            name: '홍길동',
+            contact: '010-1234-5678',
+            company: null,
+            profile: [],
+        );
+
+        $userId = $this->service($users, $verifications, $queue)->register($request);
+
+        self::assertSame(101, $userId);
+    }
+
     public function testCreateOperatorAccountCreatesRoleAndMarksVerified(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
         // 요청 운영자(생성자) — 소속 aivance
         $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1]));
-        $users->method('emailExists')->willReturn(false);
+        $users->method('emailExists')->with('agency@aivance.test', 'aivance')->willReturn(false);
         $users->expects(self::once())->method('create')->willReturn(200);
         // 즉시 인증 완료 처리
         $users->expects(self::once())->method('markEmailVerified')->with(200);
@@ -274,7 +302,7 @@ final class UserServiceTest extends TestCase
     {
         $users = $this->createMock(UserRepositoryInterface::class);
         $users->method('findById')->with(100)->willReturn($this->userRow(['role' => 1]));
-        $users->method('emailExists')->willReturn(true);
+        $users->method('emailExists')->with('agency@aivance.test', 'aivance')->willReturn(true);
         $users->expects(self::never())->method('create');
 
         $this->expectException(AlreadyExistsException::class);
@@ -348,7 +376,7 @@ final class UserServiceTest extends TestCase
     public function testResendReissuesForUnverifiedUser(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('findActiveByEmail')->willReturn($this->userRow(['email_verified_at' => null]));
+        $users->method('findActiveByEmail')->with('user@aivance.test', 'aivance')->willReturn($this->userRow(['email_verified_at' => null]));
 
         $verifications = $this->createMock(EmailVerificationRepositoryInterface::class);
         $verifications->expects(self::once())->method('deleteUnconsumedForUser')->with(100);
@@ -357,7 +385,7 @@ final class UserServiceTest extends TestCase
         $queue = $this->createMock(QueueInterface::class);
         $queue->expects(self::once())->method('push');
 
-        $this->service($users, $verifications, $queue)->resendVerification('user@aivance.test');
+        $this->service($users, $verifications, $queue)->resendVerification('user@aivance.test', 'aivance');
     }
 
     public function testResendIsNoopForVerifiedUser(): void
@@ -369,7 +397,7 @@ final class UserServiceTest extends TestCase
         $queue->expects(self::never())->method('push');
 
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
-            ->resendVerification('user@aivance.test');
+            ->resendVerification('user@aivance.test', 'aivance');
     }
 
     public function testResendIsNoopForUnknownEmail(): void
@@ -381,7 +409,7 @@ final class UserServiceTest extends TestCase
         $queue->expects(self::never())->method('push');
 
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
-            ->resendVerification('nobody@aivance.test');
+            ->resendVerification('nobody@aivance.test', 'aivance');
     }
 
     private function serviceWithMocks(): UserService

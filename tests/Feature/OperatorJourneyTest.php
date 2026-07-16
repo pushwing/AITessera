@@ -198,6 +198,7 @@ final class OperatorJourneyTest extends TestCase
         return $this->handle('POST', '/api/v1/tokens', [], [
             'email' => $email,
             'password' => self::PASSWORD,
+            'affiliation' => 'aivance',
         ]);
     }
 

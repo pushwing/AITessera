@@ -261,13 +261,65 @@ final class AuthJourneyTest extends TestCase
     public function testResendVerificationAlwaysAccepts(): void
     {
         // 미가입 이메일 — 존재 여부를 노출하지 않으려 항상 202
-        $unknown = $this->handle('POST', '/api/v1/users/verify/resend', [], ['email' => 'nobody-' . bin2hex(random_bytes(4)) . '@aivance.test']);
+        $unknown = $this->handle('POST', '/api/v1/users/verify/resend', [], [
+            'email' => 'nobody-' . bin2hex(random_bytes(4)) . '@aivance.test',
+            'affiliation' => 'aivance',
+        ]);
         self::assertSame(202, $unknown->getStatusCode());
 
         // 가입했으나 미인증인 이메일 — 새 토큰을 큐에 적재하고 202
         [$email] = $this->register();
-        $resend = $this->handle('POST', '/api/v1/users/verify/resend', [], ['email' => $email]);
+        $resend = $this->handle('POST', '/api/v1/users/verify/resend', [], ['email' => $email, 'affiliation' => 'aivance']);
         self::assertSame(202, $resend->getStatusCode());
+    }
+
+    public function testSameEmailCanRegisterAndLoginToTwoDifferentAffiliations(): void
+    {
+        $email = 'e2e-multi-' . bin2hex(random_bytes(6)) . '@aivance.test';
+        $this->createdEmails[] = $email;
+
+        // 1) aivance 소속으로 가입·인증·로그인
+        $registerAivance = $this->handle('POST', '/api/v1/users', [], $this->registerPayload($email));
+        self::assertSame(201, $registerAivance->getStatusCode(), (string) $registerAivance->getBody());
+        $verifyTokenAivance = $this->popVerificationToken();
+        $this->handle('POST', '/api/v1/users/verify', [], ['token' => $verifyTokenAivance]);
+
+        $loginAivance = $this->login($email, null, 'aivance');
+        self::assertSame(201, $loginAivance->getStatusCode());
+
+        // 2) 같은 이메일로 ailicet 소속에도 독립적으로 가입 가능해야 한다(409가 아니어야 함)
+        $ailicetPayload = $this->registerPayload($email);
+        $ailicetPayload['affiliation'] = 'ailicet';
+        $registerAilicet = $this->handle('POST', '/api/v1/users', [], $ailicetPayload);
+        self::assertSame(201, $registerAilicet->getStatusCode(), (string) $registerAilicet->getBody());
+
+        // 3) ailicet 계정은 아직 이메일 미인증 — ailicet 소속으로 로그인하면 403(EMAIL_NOT_VERIFIED)
+        $loginAilicetBeforeVerify = $this->login($email, null, 'ailicet');
+        self::assertSame(403, $loginAilicetBeforeVerify->getStatusCode());
+        self::assertSame('EMAIL_NOT_VERIFIED', $this->decode($loginAilicetBeforeVerify)['code']);
+
+        // 4) ailicet 인증 후 로그인 성공 — aivance 로그인과 별개의 토큰이 발급된다
+        $verifyTokenAilicet = $this->popVerificationToken();
+        $this->handle('POST', '/api/v1/users/verify', [], ['token' => $verifyTokenAilicet]);
+        $loginAilicet = $this->login($email, null, 'ailicet');
+        self::assertSame(201, $loginAilicet->getStatusCode());
+        self::assertNotSame(
+            $this->decode($loginAivance)['data']['access_token'],
+            $this->decode($loginAilicet)['data']['access_token'],
+        );
+    }
+
+    public function testLoginWithAffiliationTheEmailIsNotRegisteredInReturns401(): void
+    {
+        // aivance로만 가입·인증했는데 ailicet 소속으로 로그인 시도 → INVALID_CREDENTIALS(계정 존재 노출 안 함)
+        $tokens = $this->registerVerifyLogin();
+        self::assertNotEmpty($tokens['access_token']);
+
+        [$email] = [$this->createdEmails[array_key_last($this->createdEmails)]];
+        $response = $this->login($email, null, 'ailicet');
+
+        self::assertSame(401, $response->getStatusCode());
+        self::assertSame('INVALID_CREDENTIALS', $this->decode($response)['code']);
     }
 
     // ── 시나리오 헬퍼 ─────────────────────────────────────────────────────
@@ -325,11 +377,12 @@ final class AuthJourneyTest extends TestCase
         ];
     }
 
-    private function login(string $email, ?string $password = null): ResponseInterface
+    private function login(string $email, ?string $password = null, string $affiliation = 'aivance'): ResponseInterface
     {
         return $this->handle('POST', '/api/v1/tokens', [], [
             'email' => $email,
             'password' => $password ?? self::PASSWORD,
+            'affiliation' => $affiliation,
         ]);
     }
 
