@@ -18,15 +18,21 @@ final class ScopeUsersEmailUniqueToAffiliation extends AbstractMigration
 {
     public function up(): void
     {
-        $this->execute('ALTER TABLE users DROP INDEX uniq_users_email_active');
+        // DROP·ADD를 한 ALTER문으로 묶어 MySQL이 하나의 원자적 온라인 DDL로 처리하게 한다.
+        // 별도 문장으로 나누면 두 ALTER 사이에 email 유니크 제약이 잠깐 전혀 없는 창이 생긴다.
         $this->execute(
-            'ALTER TABLE users ADD UNIQUE INDEX uniq_users_email_active_affiliation (email_active, affiliation)',
+            'ALTER TABLE users
+                DROP INDEX uniq_users_email_active,
+                ADD UNIQUE INDEX uniq_users_email_active_affiliation (email_active, affiliation)',
         );
     }
 
     public function down(): void
     {
-        $this->execute('ALTER TABLE users DROP INDEX uniq_users_email_active_affiliation');
-        $this->execute('ALTER TABLE users ADD UNIQUE INDEX uniq_users_email_active (email_active)');
+        $this->execute(
+            'ALTER TABLE users
+                DROP INDEX uniq_users_email_active_affiliation,
+                ADD UNIQUE INDEX uniq_users_email_active (email_active)',
+        );
     }
 }
