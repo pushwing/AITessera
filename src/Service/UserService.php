@@ -279,9 +279,9 @@ final readonly class UserService
      *
      * 이메일 존재 여부를 노출하지 않도록, 대상이 없거나 이미 인증된 경우에도 조용히 성공 처리한다.
      */
-    public function resendVerification(string $email): void
+    public function resendVerification(string $email, string $affiliation): void
     {
-        $row = $this->users->findActiveByEmail($email);
+        $row = $this->users->findActiveByEmail($email, $affiliation);
         if ($row === null) {
             return;
         }

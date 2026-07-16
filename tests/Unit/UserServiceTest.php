@@ -348,7 +348,7 @@ final class UserServiceTest extends TestCase
     public function testResendReissuesForUnverifiedUser(): void
     {
         $users = $this->createMock(UserRepositoryInterface::class);
-        $users->method('findActiveByEmail')->willReturn($this->userRow(['email_verified_at' => null]));
+        $users->method('findActiveByEmail')->with('user@aivance.test', 'aivance')->willReturn($this->userRow(['email_verified_at' => null]));
 
         $verifications = $this->createMock(EmailVerificationRepositoryInterface::class);
         $verifications->expects(self::once())->method('deleteUnconsumedForUser')->with(100);
@@ -357,7 +357,7 @@ final class UserServiceTest extends TestCase
         $queue = $this->createMock(QueueInterface::class);
         $queue->expects(self::once())->method('push');
 
-        $this->service($users, $verifications, $queue)->resendVerification('user@aivance.test');
+        $this->service($users, $verifications, $queue)->resendVerification('user@aivance.test', 'aivance');
     }
 
     public function testResendIsNoopForVerifiedUser(): void
@@ -369,7 +369,7 @@ final class UserServiceTest extends TestCase
         $queue->expects(self::never())->method('push');
 
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
-            ->resendVerification('user@aivance.test');
+            ->resendVerification('user@aivance.test', 'aivance');
     }
 
     public function testResendIsNoopForUnknownEmail(): void
@@ -381,7 +381,7 @@ final class UserServiceTest extends TestCase
         $queue->expects(self::never())->method('push');
 
         $this->service($users, $this->createMock(EmailVerificationRepositoryInterface::class), $queue)
-            ->resendVerification('nobody@aivance.test');
+            ->resendVerification('nobody@aivance.test', 'aivance');
     }
 
     private function serviceWithMocks(): UserService
