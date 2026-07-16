@@ -75,9 +75,9 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
-          SHA_SHORT: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           # if 조건식에서는 secrets 컨텍스트를 참조할 수 없어(Unrecognized named-value),
           # 미설정 시 스킵 여부는 스크립트 내부에서 판단한다.
@@ -85,9 +85,14 @@ jobs:
             echo "SLACK_WEBHOOK_URL 미설정 — Slack 알림 스킵"
             exit 0
           fi
+          REPO_NAME="${REPO##*/}"
+          # workflow_dispatch(수동 실행)는 head_commit 이 없어 COMMIT_MSG 가 빈 값일 수 있다.
+          MSG_LINE="$(printf '%s' "$COMMIT_MSG" | head -n1)"
+          [ -z "$MSG_LINE" ] && MSG_LINE="(커밋 메시지 없음 — 수동 실행)"
           payload=$(jq -n \
-            --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
-            '{text: ("✅ *" + $repo + "* 배포 성공 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
+            --arg repo_name "$REPO_NAME" --arg repo "$REPO" --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" --arg msg "$MSG_LINE" \
+            '{text: ("[" + $repo_name + "] 배포 성공\n저장소: " + $repo + "\n브랜치: " + $branch + "\n작성자: " + $actor + "\n내용: " + $msg)}')
           curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
 
       - name: Slack 알림 (실패)
@@ -95,15 +100,19 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
-          SHA_SHORT: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
             echo "SLACK_WEBHOOK_URL 미설정 — Slack 알림 스킵"
             exit 0
           fi
+          REPO_NAME="${REPO##*/}"
+          MSG_LINE="$(printf '%s' "$COMMIT_MSG" | head -n1)"
+          [ -z "$MSG_LINE" ] && MSG_LINE="(커밋 메시지 없음 — 수동 실행)"
           payload=$(jq -n \
-            --arg repo "$REPO" --arg sha "${SHA_SHORT:0:7}" --arg actor "$ACTOR" --arg url "$RUN_URL" \
-            '{text: ("❌ *" + $repo + "* 배포 실패 (`" + $sha + "`) — by " + $actor + "\n" + $url)}')
+            --arg repo_name "$REPO_NAME" --arg repo "$REPO" --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" --arg msg "$MSG_LINE" \
+            '{text: ("[" + $repo_name + "] 배포 실패\n저장소: " + $repo + "\n브랜치: " + $branch + "\n작성자: " + $actor + "\n내용: " + $msg)}')
           curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
