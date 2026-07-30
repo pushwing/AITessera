@@ -357,8 +357,9 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - **로컬 검증** (`.githooks/pre-push`, `git config core.hooksPath .githooks`) — `dev` 로의
   push 시 `composer check`(cs-check → PHPStan level 8 → PHPUnit) 필수, 실패 시 push 중단.
   `main` 직접 push 는 무조건 차단. 문서 전용 변경은 자동 스킵. 긴급 우회 `SKIP_HOOKS=1`.
-- **CI** (`.github/workflows/ci.yml`) — `dev` → `main` PR 에서만 MySQL·Redis 컨테이너를
-  띄우고 `cs-check → PHPStan(level 8) → migrate → PHPUnit` 순차 검증
+- **CI** (`.github/workflows/ci.yml`) — `dev` → `main` PR 에서만, self-hosted macOS 러너 위에서
+  MySQL·Redis 컨테이너(`docker run`, 포트 23306/26379)를 띄우고
+  `cs-check → PHPStan(level 8) → migrate → PHPUnit` 순차 검증
 - **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포, 완료 후 Slack 알림
   (`SLACK_WEBHOOK_URL` 설정 시 성공/실패 모두 전송, 미설정 시 알림만 스킵)
 

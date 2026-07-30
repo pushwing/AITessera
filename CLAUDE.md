@@ -223,18 +223,40 @@ merge commit 으로 머지하므로(전역 규칙), CI 가 통과한 커밋 조�
 
 - **동시성**: 같은 ref 새 푸시 시 진행 중 실행 취소 (`concurrency.cancel-in-progress`)
 
+### self-hosted 러너에서 돈다
+
+GitHub 호스팅 러너(`ubuntu-latest`) 대신 로컬 Mac 을 self-hosted 러너로 등록해 돈다(호스팅
+러너 결제 문제가 계기). `backend` 잡은 `runs-on: [self-hosted, macOS, ARM64]`.
+
+- **MySQL/Redis**: self-hosted macOS 러너는 `services:` 도커 컨테이너를 지원하지 않는다(Linux
+  러너 전용 기능). 대신 잡 안에서 `docker run` 으로 직접 기동하고 `if: always()` 스텝으로 정리한다.
+- **포트**: 이 Mac 은 개발용으로 시스템 `mysqld`(3306)·로컬 `redis-server`(6379) 를 상시 띄워두고
+  있어 CI 전용 컨테이너는 다른 호스트 포트를 쓴다 — MySQL `23306`, Redis `26379`
+  (`CI_MYSQL_PORT`/`CI_REDIS_PORT` 로 오버라이드, `docker run` 실행 시 `github.run_id` 로 컨테이너
+  이름을 유니크하게 만들어 동시 실행과도 충돌하지 않는다). 다른 저장소의 self-hosted CI 포트와
+  겹치지 않는 값인지 새로 추가할 때마다 확인할 것.
+- **sed 함정**: macOS(BSD) `sed -i` 는 GNU 방식과 달리 확장자 인자가 필수라 `sed -i ''` 로 써야
+  한다 — Linux 러너 시절 문법(`sed -i` 인자 없음)을 그대로 쓰면 `.env` 준비 스텝이 조용히 깨진다.
+- **호스팅 러너로 되돌리려면**: `runs-on` 을 `ubuntu-latest` 로 바꾸고 MySQL/Redis 를 다시
+  `services:` 블록으로 되돌리면 된다(포트도 표준값 `3306`/`6379` 로 원복 가능).
+- **러너 등록은 Claude 가 대신 하지 않는다** — launchd 서비스 설치 등 시스템 설정 변경이라
+  사람이 직접 GitHub 저장소 `Settings → Actions → Runners → New self-hosted runner` 페이지에서
+  안내하는 명령을 실행해 등록한다.
+
 ### `backend` 잡 — PHP · PHP-CS-Fixer · PHPStan · PHPUnit
 
-`mysql:8.0` · `redis:7` 서비스 컨테이너를 띄우고 다음 순서로 검증한다.
+MySQL·Redis 컨테이너를 직접 기동하고 다음 순서로 검증한다.
 
-1. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
-2. Composer 캐시 → `composer install`
-3. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
-4. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
-5. `composer cs-check` (PHP-CS-Fixer dry-run)
-6. `composer analyse` (PHPStan level 8)
-7. MySQL 헬스 대기 → `php bin/console migrate` 로 테스트 스키마 구성
-8. `composer test` (PHPUnit 단위·DB 통합)
+1. `docker run` 으로 MySQL·Redis 컨테이너 기동 → 헬스 대기
+2. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
+3. Composer 캐시 → `composer install`
+4. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
+5. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
+6. `composer cs-check` (PHP-CS-Fixer dry-run)
+7. `composer analyse` (PHPStan level 8)
+8. `php bin/console migrate` 로 테스트 스키마 구성
+9. `composer test` (PHPUnit 단위·DB 통합)
+10. `if: always()` — 컨테이너 정리(`docker rm -f`)
 
 > 새 PHP 코드는 PHPStan level 8 통과 + 관련 PHPUnit 테스트가 그린이어야 CI를 통과한다. 새 기능에는 `tests/` 테스트를 함께 작성한다.
 
