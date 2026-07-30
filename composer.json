@@ -46,7 +46,10 @@
         "optimize-autoloader": true
     },
     "scripts": {
-        "serve": "php -S localhost:8305 -t public",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -S localhost:8305 -t public"
+        ],
         "test": "phpunit",
         "analyse": "phpstan analyse",
         "cs-fix": "php-cs-fixer fix",
