@@ -158,24 +158,105 @@ $userId = (int) $request->getAttribute('userId');
 - 전역 정의(Info·Server·`bearerAuth` 보안 스킴)는 `src/OpenApiSpec.php` 에 둔다.
 - 스펙 경로: `/api/v1/openapi.json`(swagger-php v5 가 `src/` 스캔 → JSON, 운영은 캐시).
 
+## 검증 게이트 — 어디서 무엇을 돌리는가
+
+검증은 로컬에서 끝낸다. `feature/*` → `dev` PR 에는 CI 를 걸지 않고, CI 는 `dev` → `main`
+배포 PR 에서만 돈다.
+
+```
+feature/*  ──[로컬 검증: pre-push 훅]──▶  dev  ──[PR + CI]──▶  main
+                    ↑                        ↑
+              여기가 실질적 게이트        여기서만 CI 가 돈다
+```
+
+| 시점 | 무엇을 | 누가 |
+|------|--------|------|
+| 개발 중 | `composer analyse` + `composer test` 수시 실행 | 사람 / Claude |
+| `dev` 푸시 전 | `composer check`(cs-check + PHPStan + PHPUnit) 필수 — 실패하면 푸시하지 않는다 | pre-push 훅 |
+| `feature/*` → `dev` PR | CI 없음. 코드 리뷰만 | — |
+| `dev` → `main` PR | GitHub Actions 전체(cs-check + PHPStan + migrate + PHPUnit) | CI |
+
+`feature → dev` 에 CI 가 없다는 건 `dev` 브랜치가 검증받지 않은 코드를 받을 수 있다는 뜻이다.
+그 상태로 여러 기능이 쌓인 뒤 배포 PR 에서 처음 CI 가 돌면 어느 커밋이 깨뜨렸는지 찾는 비용이
+커지고 배포가 막힌다. **로컬 검증이 유일한 방어선이므로 생략 = 규칙 위반이다.** Claude 가 작업할
+때도 동일하다 — `dev` 로 올리는 PR 을 만들기 전에 `composer check` 를 실제로 실행하고 출력을
+확인한 다음 진행한다. "통과할 것 같다"로 넘어가지 않는다.
+
+### Git Hooks 로 강제
+
+습관에 맡기지 않고 커밋된 훅으로 강제한다. 클론 직후 1회 활성화(`composer install` 시
+`post-install-cmd` 가 자동 실행하므로 보통 수동 설정 불필요):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+| 훅 | 동작 |
+|----|------|
+| `pre-commit` | 스테이징된 `*.php` 를 PHP-CS-Fixer 로 자동 정렬 후 재-스테이징. 커밋을 막지는 않는다 |
+| `pre-push` | 푸시 대상이 `dev` 일 때만 `composer check` 실행, 실패 시 푸시 중단 |
+| `pre-push` | `main` 직접 푸시는 무조건 차단 — 배포는 `dev` → `main` PR(merge commit)로만 |
+
+- `feature/*` 푸시는 검증하지 않는다 — 작업 중 빠른 반복을 막지 않기 위해서다.
+- 문서 전용 변경(`*.md`, `docs/**`, `.claude/rules/**` 만 바뀐 푸시)은 `pre-push` 가 비교 대상
+  코드가 없다고 판단해 `composer check` 를 자동으로 건너뛴다. 코드가 한 줄이라도 섞이면 즉시
+  전체 검증으로 돌아간다.
+- 긴급 우회: `SKIP_HOOKS=1 git push ...` (또는 `git commit ...`)
+- `git add -p` 로 부분 스테이징한 상태에서는 `pre-commit` 이 스테이징하지 않은 변경까지 커밋에
+  넣을 수 있다 — 그때는 `SKIP_HOOKS=1` 을 쓴다.
+- PHP·Composer 가 없는 환경에서는 두 훅 모두 검증을 자동으로 건너뛰고 CI 가 최종 검증한다(단,
+  `pre-push` 의 `main` 직접 푸시 차단은 Composer 유무와 무관하게 항상 적용된다).
+
 ## CI (GitHub Actions)
 
-`dev` · `main` 으로의 **push / PR** 마다 자동 검증된다. 정의: `.github/workflows/ci.yml`.
+`dev` → `main` **배포 PR** 에서만 자동 검증된다(`feature/*` → `dev` PR 에는 걸리지 않는다).
+정의: `.github/workflows/ci.yml`.
+
+```yaml
+on:
+  pull_request:
+    branches: [main]     # dev 로 가는 PR 에서는 돌지 않는다
+```
+
+`branches` 를 비워두면 모든 PR 에서 돌아 위 정책이 무의미해진다. `dev` → `main` 배포 PR 은
+merge commit 으로 머지하므로(전역 규칙), CI 가 통과한 커밋 조합이 그대로 `main` 에 올라간다.
 
 - **동시성**: 같은 ref 새 푸시 시 진행 중 실행 취소 (`concurrency.cancel-in-progress`)
 
+### self-hosted 러너에서 돈다
+
+GitHub 호스팅 러너(`ubuntu-latest`) 대신 로컬 Mac 을 self-hosted 러너로 등록해 돈다(호스팅
+러너 결제 문제가 계기). `backend` 잡은 `runs-on: [self-hosted, macOS, ARM64]`.
+
+- **MySQL/Redis**: self-hosted macOS 러너는 `services:` 도커 컨테이너를 지원하지 않는다(Linux
+  러너 전용 기능). 대신 잡 안에서 `docker run` 으로 직접 기동하고 `if: always()` 스텝으로 정리한다.
+- **포트**: 이 Mac 은 개발용으로 시스템 `mysqld`(3306)·로컬 `redis-server`(6379) 를 상시 띄워두고
+  있어 CI 전용 컨테이너는 다른 호스트 포트를 쓴다 — MySQL `23306`, Redis `26379`
+  (`CI_MYSQL_PORT`/`CI_REDIS_PORT` 로 오버라이드, `docker run` 실행 시 `github.run_id` 로 컨테이너
+  이름을 유니크하게 만들어 동시 실행과도 충돌하지 않는다). 다른 저장소의 self-hosted CI 포트와
+  겹치지 않는 값인지 새로 추가할 때마다 확인할 것.
+- **sed 함정**: macOS(BSD) `sed -i` 는 GNU 방식과 달리 확장자 인자가 필수라 `sed -i ''` 로 써야
+  한다 — Linux 러너 시절 문법(`sed -i` 인자 없음)을 그대로 쓰면 `.env` 준비 스텝이 조용히 깨진다.
+- **호스팅 러너로 되돌리려면**: `runs-on` 을 `ubuntu-latest` 로 바꾸고 MySQL/Redis 를 다시
+  `services:` 블록으로 되돌리면 된다(포트도 표준값 `3306`/`6379` 로 원복 가능).
+- **러너 등록은 Claude 가 대신 하지 않는다** — launchd 서비스 설치 등 시스템 설정 변경이라
+  사람이 직접 GitHub 저장소 `Settings → Actions → Runners → New self-hosted runner` 페이지에서
+  안내하는 명령을 실행해 등록한다.
+
 ### `backend` 잡 — PHP · PHP-CS-Fixer · PHPStan · PHPUnit
 
-`mysql:8.0` · `redis:7` 서비스 컨테이너를 띄우고 다음 순서로 검증한다.
+MySQL·Redis 컨테이너를 직접 기동하고 다음 순서로 검증한다.
 
-1. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
-2. Composer 캐시 → `composer install`
-3. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
-4. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
-5. `composer cs-check` (PHP-CS-Fixer dry-run)
-6. `composer analyse` (PHPStan level 8)
-7. MySQL 헬스 대기 → `php bin/console migrate` 로 테스트 스키마 구성
-8. `composer test` (PHPUnit 단위·DB 통합)
+1. `docker run` 으로 MySQL·Redis 컨테이너 기동 → 헬스 대기
+2. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
+3. Composer 캐시 → `composer install`
+4. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
+5. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
+6. `composer cs-check` (PHP-CS-Fixer dry-run)
+7. `composer analyse` (PHPStan level 8)
+8. `php bin/console migrate` 로 테스트 스키마 구성
+9. `composer test` (PHPUnit 단위·DB 통합)
+10. `if: always()` — 컨테이너 정리(`docker rm -f`)
 
 > 새 PHP 코드는 PHPStan level 8 통과 + 관련 PHPUnit 테스트가 그린이어야 CI를 통과한다. 새 기능에는 `tests/` 테스트를 함께 작성한다.
 
