@@ -49,7 +49,7 @@ php bin/console migrate   # 마이그레이션 실행 (phinx 래퍼)
 ```env
 # 앱
 APP_ENV = local
-APP_BASE_URL = http://localhost:9300/
+APP_BASE_URL = http://localhost:8305/
 
 # DB
 DB_HOST = localhost
@@ -73,7 +73,7 @@ JWT_REFRESH_TTL = 1209600   # 초 단위 (14일)
 ## 커맨드
 
 ```bash
-composer serve                # 개발 서버 — PHP 내장 서버 (php -S localhost:9300 -t public)
+composer serve                # 개발 서버 — PHP 내장 서버 (php -S localhost:8305 -t public)
 composer test                 # PHPUnit 단독 실행
 composer analyse              # PHPStan 단독 실행
 composer cs-fix               # PHP-CS-Fixer 자동 정렬

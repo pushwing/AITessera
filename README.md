@@ -121,7 +121,7 @@ php bin/console seed:run   # 재실행 안전 (이미 있으면 건너뜀)
 로그인 확인:
 
 ```bash
-curl -X POST http://localhost:9300/api/v1/tokens \
+curl -X POST http://localhost:8305/api/v1/tokens \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@aivance.test","password":"password1234!"}'
 ```
@@ -158,8 +158,8 @@ RS256 공개키를 외부 서비스가 **자동으로 내려받아 검증**할 �
 Set · RFC 7517) 엔드포인트를 제공한다. 공개키 파일을 수동 배포할 필요가 없다.
 
 ```bash
-curl http://localhost:9300/.well-known/jwks.json   # 표준 well-known 경로
-curl http://localhost:9300/api/v1/jwks.json         # 버전 경로 별칭 (동일 응답)
+curl http://localhost:8305/.well-known/jwks.json   # 표준 well-known 경로
+curl http://localhost:8305/api/v1/jwks.json         # 버전 경로 별칭 (동일 응답)
 ```
 
 ```json
@@ -174,7 +174,7 @@ curl http://localhost:9300/api/v1/jwks.json         # 버전 경로 별칭 (동�
 ### 개발 서버 · 큐 워커
 
 ```bash
-composer serve             # http://localhost:9300
+composer serve             # http://localhost:8305
 php bin/console mail:work   # 메일 큐 컨슈머 (큐 비우고 종료)
 php bin/console log:work    # 로그 큐 컨슈머 (큐 비우고 종료)
 ```
@@ -184,7 +184,7 @@ php bin/console log:work    # 로그 큐 컨슈머 (큐 비우고 종료)
 ## 커맨드
 
 ```bash
-composer serve      # 개발 서버 (php -S localhost:9300 -t public)
+composer serve      # 개발 서버 (php -S localhost:8305 -t public)
 composer test       # PHPUnit
 composer analyse    # PHPStan (level 8)
 composer cs-fix     # PHP-CS-Fixer 자동 정렬
@@ -271,7 +271,7 @@ public/index.php
 #### 예시 — 로그인
 
 ```bash
-curl -X POST http://localhost:9300/api/v1/tokens \
+curl -X POST http://localhost:8305/api/v1/tokens \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@aivance.test","password":"password1234!"}'
 ```

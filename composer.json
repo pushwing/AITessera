@@ -46,7 +46,7 @@
         "optimize-autoloader": true
     },
     "scripts": {
-        "serve": "php -S localhost:9300 -t public",
+        "serve": "php -S localhost:8305 -t public",
         "test": "phpunit",
         "analyse": "phpstan analyse",
         "cs-fix": "php-cs-fixer fix",
@@ -64,7 +64,7 @@
         "post-update-cmd": "git config core.hooksPath .githooks || true"
     },
     "scripts-descriptions": {
-        "serve": "개발 서버 — PHP 내장 서버 (localhost:9300, DocumentRoot=public)",
+        "serve": "개발 서버 — PHP 내장 서버 (localhost:8305, DocumentRoot=public)",
         "test": "PHPUnit 단독 실행",
         "analyse": "PHPStan (level 8) 단독 실행",
         "cs-fix": "PHP-CS-Fixer 자동 정렬",
