@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [dev, main]
   pull_request:
-    branches: [dev, main]
+    branches: [main]     # dev → main 배포 PR 에서만 돈다. feature → dev PR 은 로컬 검증(git hooks)이 게이트.
 
 # 같은 ref 에 새 푸시가 오면 진행 중 실행을 취소
 concurrency:

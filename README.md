@@ -342,18 +342,25 @@ composer test
 
 ---
 
-## CI / CD
+## 검증 게이트 / CI / CD
 
-- **CI** (`.github/workflows/ci.yml`) — `dev`·`main` push/PR 마다 MySQL·Redis 컨테이너를
-  띄우고 `cs-check → PHPStan(level 8) → migrate → PHPUnit` 순차 검증
-- **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포, 완료 후 Slack 알림
-  (`SLACK_WEBHOOK_URL` 설정 시 성공/실패 모두 전송, 미설정 시 알림만 스킵)
-
-### Git 워크플로우
+검증은 로컬에서 끝낸다 — `feature/*` → `dev` PR 에는 CI 가 없고, `dev` 푸시 전 git hook
+(`pre-push`)이 `composer check` 를 강제하는 것이 실질적 게이트다. CI 는 `dev` → `main`
+배포 PR 에서만 돈다.
 
 ```
 feature/* → (Squash merge) → dev → (Merge commit) → main
+     ↑                          ↑
+로컬 검증 없음               pre-push 훅이 게이트     ↑ CI 는 여기서만
 ```
+
+- **로컬 검증** (`.githooks/pre-push`, `git config core.hooksPath .githooks`) — `dev` 로의
+  push 시 `composer check`(cs-check → PHPStan level 8 → PHPUnit) 필수, 실패 시 push 중단.
+  `main` 직접 push 는 무조건 차단. 문서 전용 변경은 자동 스킵. 긴급 우회 `SKIP_HOOKS=1`.
+- **CI** (`.github/workflows/ci.yml`) — `dev` → `main` PR 에서만 MySQL·Redis 컨테이너를
+  띄우고 `cs-check → PHPStan(level 8) → migrate → PHPUnit` 순차 검증
+- **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포, 완료 후 Slack 알림
+  (`SLACK_WEBHOOK_URL` 설정 시 성공/실패 모두 전송, 미설정 시 알림만 스킵)
 
 `main`·`dev` 직접 push 금지. 자세한 규칙은 [`CLAUDE.md`](CLAUDE.md) 참고.
 

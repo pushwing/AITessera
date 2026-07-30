@@ -158,9 +158,68 @@ $userId = (int) $request->getAttribute('userId');
 - 전역 정의(Info·Server·`bearerAuth` 보안 스킴)는 `src/OpenApiSpec.php` 에 둔다.
 - 스펙 경로: `/api/v1/openapi.json`(swagger-php v5 가 `src/` 스캔 → JSON, 운영은 캐시).
 
+## 검증 게이트 — 어디서 무엇을 돌리는가
+
+검증은 로컬에서 끝낸다. `feature/*` → `dev` PR 에는 CI 를 걸지 않고, CI 는 `dev` → `main`
+배포 PR 에서만 돈다.
+
+```
+feature/*  ──[로컬 검증: pre-push 훅]──▶  dev  ──[PR + CI]──▶  main
+                    ↑                        ↑
+              여기가 실질적 게이트        여기서만 CI 가 돈다
+```
+
+| 시점 | 무엇을 | 누가 |
+|------|--------|------|
+| 개발 중 | `composer analyse` + `composer test` 수시 실행 | 사람 / Claude |
+| `dev` 푸시 전 | `composer check`(cs-check + PHPStan + PHPUnit) 필수 — 실패하면 푸시하지 않는다 | pre-push 훅 |
+| `feature/*` → `dev` PR | CI 없음. 코드 리뷰만 | — |
+| `dev` → `main` PR | GitHub Actions 전체(cs-check + PHPStan + migrate + PHPUnit) | CI |
+
+`feature → dev` 에 CI 가 없다는 건 `dev` 브랜치가 검증받지 않은 코드를 받을 수 있다는 뜻이다.
+그 상태로 여러 기능이 쌓인 뒤 배포 PR 에서 처음 CI 가 돌면 어느 커밋이 깨뜨렸는지 찾는 비용이
+커지고 배포가 막힌다. **로컬 검증이 유일한 방어선이므로 생략 = 규칙 위반이다.** Claude 가 작업할
+때도 동일하다 — `dev` 로 올리는 PR 을 만들기 전에 `composer check` 를 실제로 실행하고 출력을
+확인한 다음 진행한다. "통과할 것 같다"로 넘어가지 않는다.
+
+### Git Hooks 로 강제
+
+습관에 맡기지 않고 커밋된 훅으로 강제한다. 클론 직후 1회 활성화(`composer install` 시
+`post-install-cmd` 가 자동 실행하므로 보통 수동 설정 불필요):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+| 훅 | 동작 |
+|----|------|
+| `pre-commit` | 스테이징된 `*.php` 를 PHP-CS-Fixer 로 자동 정렬 후 재-스테이징. 커밋을 막지는 않는다 |
+| `pre-push` | 푸시 대상이 `dev` 일 때만 `composer check` 실행, 실패 시 푸시 중단 |
+| `pre-push` | `main` 직접 푸시는 무조건 차단 — 배포는 `dev` → `main` PR(merge commit)로만 |
+
+- `feature/*` 푸시는 검증하지 않는다 — 작업 중 빠른 반복을 막지 않기 위해서다.
+- 문서 전용 변경(`*.md`, `docs/**`, `.claude/rules/**` 만 바뀐 푸시)은 `pre-push` 가 비교 대상
+  코드가 없다고 판단해 `composer check` 를 자동으로 건너뛴다. 코드가 한 줄이라도 섞이면 즉시
+  전체 검증으로 돌아간다.
+- 긴급 우회: `SKIP_HOOKS=1 git push ...` (또는 `git commit ...`)
+- `git add -p` 로 부분 스테이징한 상태에서는 `pre-commit` 이 스테이징하지 않은 변경까지 커밋에
+  넣을 수 있다 — 그때는 `SKIP_HOOKS=1` 을 쓴다.
+- PHP·Composer 가 없는 환경에서는 두 훅 모두 검증을 자동으로 건너뛰고 CI 가 최종 검증한다(단,
+  `pre-push` 의 `main` 직접 푸시 차단은 Composer 유무와 무관하게 항상 적용된다).
+
 ## CI (GitHub Actions)
 
-`dev` · `main` 으로의 **push / PR** 마다 자동 검증된다. 정의: `.github/workflows/ci.yml`.
+`dev` → `main` **배포 PR** 에서만 자동 검증된다(`feature/*` → `dev` PR 에는 걸리지 않는다).
+정의: `.github/workflows/ci.yml`.
+
+```yaml
+on:
+  pull_request:
+    branches: [main]     # dev 로 가는 PR 에서는 돌지 않는다
+```
+
+`branches` 를 비워두면 모든 PR 에서 돌아 위 정책이 무의미해진다. `dev` → `main` 배포 PR 은
+merge commit 으로 머지하므로(전역 규칙), CI 가 통과한 커밋 조합이 그대로 `main` 에 올라간다.
 
 - **동시성**: 같은 ref 새 푸시 시 진행 중 실행 취소 (`concurrency.cancel-in-progress`)
 
