@@ -110,4 +110,4 @@ jobs:
 
       - name: 컨테이너 정리
         if: always()
-        run: docker rm -f "$CI_MYSQL_CONTAINER" "$CI_REDIS_CONTAINER" 2>/dev/null || true
+        run: docker rm -f -v "$CI_MYSQL_CONTAINER" "$CI_REDIS_CONTAINER" 2>/dev/null || true
