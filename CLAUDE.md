@@ -73,7 +73,7 @@ JWT_REFRESH_TTL = 1209600   # 초 단위 (14일)
 ## 커맨드
 
 ```bash
-composer serve                # 개발 서버 — PHP 내장 서버 (php -S localhost:8305 -t public)
+php -S 127.0.0.1:8305 -t public   # 개발 서버 — PHP 내장 서버 (tessera.test, Caddy 리버스 프록시 경유)
 composer test                 # PHPUnit 단독 실행
 composer analyse              # PHPStan 단독 실행
 composer cs-fix               # PHP-CS-Fixer 자동 정렬
