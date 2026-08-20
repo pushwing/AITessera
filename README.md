@@ -363,7 +363,8 @@ feature/* → (Squash merge) → dev → (Merge commit) → main
 - **CD** (`.github/workflows/deploy.yml`) — `main` push 시 SSH 자동 배포, 완료 후 Slack 알림
   (`SLACK_WEBHOOK_URL` 설정 시 성공/실패 모두 전송, 미설정 시 알림만 스킵)
 
-`main`·`dev` 직접 push 금지. 자세한 규칙은 [`CLAUDE.md`](CLAUDE.md) 참고.
+`main`·`dev` 직접 push 금지. Claude Code 작업 규칙은 [`CLAUDE.md`](CLAUDE.md),
+Codex 작업 규칙은 [`AGENTS.md`](AGENTS.md)를 참고.
 
 ---
 
