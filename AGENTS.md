@@ -34,7 +34,7 @@ AITessera — Secure JWT-based authentication & authorization API for the AIvanc
 | **코드 스타일** | PHP-CS-Fixer (PSR-12) | 커밋 전 자동 정렬 |
 | **테스트** | PHPUnit | 단위·통합 |
 
-> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 전역 [`~/.codex/rules/security.md`](~/.codex/rules/security.md) 참고.
+> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 보안 규칙을 참고.
 
 ## 로컬 환경 설정
 
@@ -136,11 +136,11 @@ return $handler->handle($request);
 $userId = (int) $request->getAttribute('userId');
 ```
 
-> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — 전역 [`~/.codex/rules/security.md`](~/.codex/rules/security.md) 참고.
+> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — 전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 보안 규칙을 참고.
 
 ### 프레임워크리스 아키텍처 절대 금지
 
-전역 [`~/.codex/rules/code-style.md`](~/.codex/rules/code-style.md) 의 레이어 책임에 더해, 프레임워크가 없으므로 아래를 특히 강제한다.
+전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 코드 스타일·레이어 책임에 더해, 프레임워크가 없으므로 아래를 특히 강제한다.
 
 | 금지 | 이유 |
 |------|------|
@@ -152,7 +152,7 @@ $userId = (int) $request->getAttribute('userId');
 
 ### OpenAPI 문서 (구성 위치)
 
-전역 [`~/.codex/rules/api-design.md`](~/.codex/rules/api-design.md) 의 OpenAPI 규칙을 따르되, AITessera 는:
+전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 REST API 규칙을 따르되, AITessera 는:
 - **요청/응답 스키마**는 `src/OpenApi/Schema/` 의 `#[OA\Schema]` 컴포넌트로 정의하고 `$ref` 로 참조(인라인 중복 금지).
 - 모든 4xx/5xx 응답은 공용 `ErrorResponse` 컴포넌트를 참조.
 - 전역 정의(Info·Server·`bearerAuth` 보안 스킴)는 `src/OpenApiSpec.php` 에 둔다.
@@ -198,7 +198,7 @@ git config core.hooksPath .githooks
 | `pre-push` | `main` 직접 푸시는 무조건 차단 — 배포는 `dev` → `main` PR(merge commit)로만 |
 
 - `feature/*` 푸시는 검증하지 않는다 — 작업 중 빠른 반복을 막지 않기 위해서다.
-- 문서 전용 변경(`*.md`, `docs/**`, `.codex/rules/**` 만 바뀐 푸시)은 `pre-push` 가 비교 대상
+- 문서 전용 변경(`*.md`, `docs/**`만 바뀐 푸시)은 `pre-push` 가 비교 대상
   코드가 없다고 판단해 `composer check` 를 자동으로 건너뛴다. 코드가 한 줄이라도 섞이면 즉시
   전체 검증으로 돌아간다.
 - 긴급 우회: `SKIP_HOOKS=1 git push ...` (또는 `git commit ...`)
