@@ -197,6 +197,9 @@ php bin/console <command>   # CLI (migrate·rollback·seed:run·jwt:keygen·mail
 
 ## 아키텍처
 
+> **다이어그램**: [아키텍처 다이어그램](docs/architecture.html) · [로그인 토큰 발급 시퀀스 다이어그램](docs/sequence-login.html)
+> (archify 로 생성한 탐색형 HTML — 다운로드 후 브라우저로 열람, 다크/라이트 테마·확대/축소·경로 추적 지원)
+
 ### 요청 처리 흐름
 
 ```
