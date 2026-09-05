@@ -1,12 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 AITessera — Secure JWT-based authentication & authorization API for the AIvance service suite.
 **프레임워크 없는 순수 모던 PHP(8.3+)** 기반 REST API 단일 프로젝트. 검증된 표준 라이브러리를
 조합해 구성하며, JWT·암호화 등 보안 핵심은 절대 직접 구현하지 않고 신뢰받는 라이브러리에 위임한다.
 
-> **공통 규칙은 전역 [`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md) 에서 자동 상속**된다(언어·Git 워크플로우·보안·코드 스타일·테스트·API 설계·부하 분산·로그 파이프라인·PHP LSP). 이 문서는 **AITessera 저장소 전용**(프레임워크리스 스택·아키텍처·CI/CD) 규칙만 정의한다.
+> **공통 규칙은 전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md) 에서 자동 상속**된다(언어·Git 워크플로우·보안·코드 스타일·테스트·API 설계·부하 분산·로그 파이프라인·PHP LSP). 이 문서는 **AITessera 저장소 전용**(프레임워크리스 스택·아키텍처·CI/CD) 규칙만 정의한다.
 >
 > 프레임워크리스 프로젝트이므로 전역 규칙의 CI4 표현은 다음으로 매핑한다: `esc()`→`htmlspecialchars`/JSON, Query Builder→PDO prepared, `model()`→DI 주입, `.env`→`vlucas/phpdotenv`.
 
@@ -34,7 +34,7 @@ AITessera — Secure JWT-based authentication & authorization API for the AIvanc
 | **코드 스타일** | PHP-CS-Fixer (PSR-12) | 커밋 전 자동 정렬 |
 | **테스트** | PHPUnit | 단위·통합 |
 
-> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 전역 [`~/.claude/rules/security.md`](~/.claude/rules/security.md) 참고.
+> 인증 설계 원칙(Access/Refresh 토큰 분리·회전·알고리즘 고정 등)은 전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 보안 규칙을 참고.
 
 ## 로컬 환경 설정
 
@@ -136,11 +136,11 @@ return $handler->handle($request);
 $userId = (int) $request->getAttribute('userId');
 ```
 
-> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — 전역 [`~/.claude/rules/security.md`](~/.claude/rules/security.md) 참고.
+> JWT 검증 제약(`SignedWith`·`StrictValidAt`·알고리즘 고정)은 인증 우회 방지의 핵심이다 — 전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 보안 규칙을 참고.
 
 ### 프레임워크리스 아키텍처 절대 금지
 
-전역 [`~/.claude/rules/code-style.md`](~/.claude/rules/code-style.md) 의 레이어 책임에 더해, 프레임워크가 없으므로 아래를 특히 강제한다.
+전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 코드 스타일·레이어 책임에 더해, 프레임워크가 없으므로 아래를 특히 강제한다.
 
 | 금지 | 이유 |
 |------|------|
@@ -152,7 +152,7 @@ $userId = (int) $request->getAttribute('userId');
 
 ### OpenAPI 문서 (구성 위치)
 
-전역 [`~/.claude/rules/api-design.md`](~/.claude/rules/api-design.md) 의 OpenAPI 규칙을 따르되, AITessera 는:
+전역 [`~/.codex/AGENTS.md`](~/.codex/AGENTS.md)의 REST API 규칙을 따르되, AITessera 는:
 - **요청/응답 스키마**는 `src/OpenApi/Schema/` 의 `#[OA\Schema]` 컴포넌트로 정의하고 `$ref` 로 참조(인라인 중복 금지).
 - 모든 4xx/5xx 응답은 공용 `ErrorResponse` 컴포넌트를 참조.
 - 전역 정의(Info·Server·`bearerAuth` 보안 스킴)는 `src/OpenApiSpec.php` 에 둔다.
@@ -171,14 +171,14 @@ feature/*  ──[로컬 검증: pre-push 훅]──▶  dev  ──[PR + CI]─
 
 | 시점 | 무엇을 | 누가 |
 |------|--------|------|
-| 개발 중 | `composer analyse` + `composer test` 수시 실행 | 사람 / Claude |
+| 개발 중 | `composer analyse` + `composer test` 수시 실행 | 사람 / Codex |
 | `dev` 푸시 전 | `composer check`(cs-check + PHPStan + PHPUnit) 필수 — 실패하면 푸시하지 않는다 | pre-push 훅 |
 | `feature/*` → `dev` PR | CI 없음. 코드 리뷰만 | — |
 | `dev` → `main` PR | GitHub Actions 전체(cs-check + PHPStan + migrate + PHPUnit) | CI |
 
 `feature → dev` 에 CI 가 없다는 건 `dev` 브랜치가 검증받지 않은 코드를 받을 수 있다는 뜻이다.
 그 상태로 여러 기능이 쌓인 뒤 배포 PR 에서 처음 CI 가 돌면 어느 커밋이 깨뜨렸는지 찾는 비용이
-커지고 배포가 막힌다. **로컬 검증이 유일한 방어선이므로 생략 = 규칙 위반이다.** Claude 가 작업할
+커지고 배포가 막힌다. **로컬 검증이 유일한 방어선이므로 생략 = 규칙 위반이다.** Codex 가 작업할
 때도 동일하다 — `dev` 로 올리는 PR 을 만들기 전에 `composer check` 를 실제로 실행하고 출력을
 확인한 다음 진행한다. "통과할 것 같다"로 넘어가지 않는다.
 
@@ -198,7 +198,7 @@ git config core.hooksPath .githooks
 | `pre-push` | `main` 직접 푸시는 무조건 차단 — 배포는 `dev` → `main` PR(merge commit)로만 |
 
 - `feature/*` 푸시는 검증하지 않는다 — 작업 중 빠른 반복을 막지 않기 위해서다.
-- 문서 전용 변경(`*.md`, `docs/**`, `.claude/rules/**` 만 바뀐 푸시)은 `pre-push` 가 비교 대상
+- 문서 전용 변경(`*.md`, `docs/**`만 바뀐 푸시)은 `pre-push` 가 비교 대상
   코드가 없다고 판단해 `composer check` 를 자동으로 건너뛴다. 코드가 한 줄이라도 섞이면 즉시
   전체 검증으로 돌아간다.
 - 긴급 우회: `SKIP_HOOKS=1 git push ...` (또는 `git commit ...`)
@@ -225,34 +225,38 @@ merge commit 으로 머지하므로(전역 규칙), CI 가 통과한 커밋 조�
 
 ### self-hosted 러너에서 돈다
 
-GitHub 호스팅 러너 대신 **조직(`aivance-kr`) self-hosted 러너 1개**로 돈다(호스팅 러너
-결제 문제가 계기). CI(`backend` 잡)·CD(`deploy` 잡) 모두 동일 러너를 쓴다 —
-`runs-on: [self-hosted, Linux, X64]`.
+GitHub 호스팅 러너(`ubuntu-latest`) 대신 로컬 Mac 을 self-hosted 러너로 등록해 돈다(호스팅
+러너 결제 문제가 계기). `backend` 잡은 `runs-on: [self-hosted, macOS, ARM64]`.
 
-- **MySQL/Redis**: Linux self-hosted 러너는 `services:` 도커 컨테이너를 네이티브 지원한다.
-  `backend` 잡은 `services:` 블록으로 MySQL·Redis 를 선언 — 기동·헬스체크·잡 종료 후 정리를
-  Actions 러너가 대신 처리하므로 별도 `docker run`/`docker rm` 스텝이 필요 없다.
-- **포트**: 이 러너는 다른 저장소의 self-hosted CI 서비스 컨테이너와 겹치지 않는 호스트
-  포트를 쓴다 — MySQL `23306`, Redis `26379`(`CI_MYSQL_PORT`/`CI_REDIS_PORT` 로 오버라이드).
-  새 저장소를 이 러너에 추가할 때마다 포트가 겹치지 않는지 확인할 것.
-- **호스팅 러너로 되돌리려면**: `runs-on` 을 `ubuntu-latest` 로 바꾸면 된다 —
-  `services:` 블록은 GitHub 호스팅 Linux 러너에서도 그대로 동작한다.
-- **러너 등록은 Claude 가 대신 하지 않는다** — 시스템 서비스 설치 등 시스템 설정 변경이라
-  사람이 직접 GitHub 조직 `Settings → Actions → Runners → New runner` 페이지에서 안내하는
-  명령을 실행해 등록한다.
+- **MySQL/Redis**: self-hosted macOS 러너는 `services:` 도커 컨테이너를 지원하지 않는다(Linux
+  러너 전용 기능). 대신 잡 안에서 `docker run` 으로 직접 기동하고 `if: always()` 스텝으로 정리한다.
+- **포트**: 이 Mac 은 개발용으로 시스템 `mysqld`(3306)·로컬 `redis-server`(6379) 를 상시 띄워두고
+  있어 CI 전용 컨테이너는 다른 호스트 포트를 쓴다 — MySQL `23306`, Redis `26379`
+  (`CI_MYSQL_PORT`/`CI_REDIS_PORT` 로 오버라이드, `docker run` 실행 시 `github.run_id` 로 컨테이너
+  이름을 유니크하게 만들어 동시 실행과도 충돌하지 않는다). 다른 저장소의 self-hosted CI 포트와
+  겹치지 않는 값인지 새로 추가할 때마다 확인할 것.
+- **sed 함정**: macOS(BSD) `sed -i` 는 GNU 방식과 달리 확장자 인자가 필수라 `sed -i ''` 로 써야
+  한다 — Linux 러너 시절 문법(`sed -i` 인자 없음)을 그대로 쓰면 `.env` 준비 스텝이 조용히 깨진다.
+- **호스팅 러너로 되돌리려면**: `runs-on` 을 `ubuntu-latest` 로 바꾸고 MySQL/Redis 를 다시
+  `services:` 블록으로 되돌리면 된다(포트도 표준값 `3306`/`6379` 로 원복 가능).
+- **러너 등록은 Codex 가 대신 하지 않는다** — launchd 서비스 설치 등 시스템 설정 변경이라
+  사람이 직접 GitHub 저장소 `Settings → Actions → Runners → New self-hosted runner` 페이지에서
+  안내하는 명령을 실행해 등록한다.
 
 ### `backend` 잡 — PHP · PHP-CS-Fixer · PHPStan · PHPUnit
 
-MySQL·Redis 를 `services:` 컨테이너로 기동한 상태로 다음 순서로 검증한다.
+MySQL·Redis 컨테이너를 직접 기동하고 다음 순서로 검증한다.
 
-1. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
-2. Composer 캐시 → `composer install`
-3. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
-4. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
-5. `composer cs-check` (PHP-CS-Fixer dry-run)
-6. `composer analyse` (PHPStan level 8)
-7. `php bin/console migrate` 로 테스트 스키마 구성
-8. `composer test` (PHPUnit 단위·DB 통합)
+1. `docker run` 으로 MySQL·Redis 컨테이너 기동 → 헬스 대기
+2. setup-php `8.4` (확장: `mbstring intl pdo_mysql redis curl dom xml tokenizer`, 커버리지 `pcov`)
+3. Composer 캐시 → `composer install`
+4. `.env.example` → `.env` 복사 후 CI용 DB·Redis·`JWT_SECRET` 주입
+5. `var/` 하위 디렉토리 생성 (git 미추적, 런타임 경로 보장)
+6. `composer cs-check` (PHP-CS-Fixer dry-run)
+7. `composer analyse` (PHPStan level 8)
+8. `php bin/console migrate` 로 테스트 스키마 구성
+9. `composer test` (PHPUnit 단위·DB 통합)
+10. `if: always()` — 컨테이너 정리(`docker rm -f`)
 
 > 새 PHP 코드는 PHPStan level 8 통과 + 관련 PHPUnit 테스트가 그린이어야 CI를 통과한다. 새 기능에는 `tests/` 테스트를 함께 작성한다.
 
@@ -262,8 +266,7 @@ MySQL·Redis 를 `services:` 컨테이너로 기동한 상태로 다음 순서�
 
 - **트리거**: `main` push + `workflow_dispatch`(수동·롤백)
 - **동시성**: `deploy-production` 그룹 — 배포 동시 실행 1개, `cancel-in-progress: false`
-- **잡 러너**: CI 와 동일한 조직 self-hosted 러너(`runs-on: [self-hosted, Linux, X64]`)에서 돈다
-- **대상**: Ubuntu + mod_php(또는 PHP-FPM) 아파치 단일 서버 (appleboy/ssh-action 으로 SSH 배포 — 배포 대상 서버는 이 잡 러너와 별개)
+- **대상**: Ubuntu + mod_php(또는 PHP-FPM) 아파치 단일 서버 (appleboy/ssh-action)
 
 ### 배포 절차 (서버 SSH 실행)
 
