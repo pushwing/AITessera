@@ -12,12 +12,19 @@ concurrency:
 jobs:
   backend:
     name: Backend (PHP 8.5 · CS · PHPStan · PHPUnit · Coverage)
+    timeout-minutes: 30
     # self-hosted Linux(X64) 조직 러너(호스팅 러너 결제 문제로 전환, 이후 org 러너 1개로 통일).
     # Linux 러너는 services: 를 네이티브 지원하므로 MySQL·Redis 는 컨테이너 서비스로 기동한다
     # (기동·헬스체크·정리를 Actions 러너가 대신 처리 — macOS 시절의 docker run 수동 관리 불필요).
     runs-on: [self-hosted, Linux, X64]
 
+    permissions:
+      contents: read
+      pull-requests: write
+
     env:
+      DEBIAN_FRONTEND: noninteractive
+      NEEDRESTART_MODE: l
       # 이 러너는 다른 저장소의 self-hosted CI 서비스 컨테이너와 겹치지 않는 포트를 쓴다.
       CI_MYSQL_PORT: 23306
       CI_REDIS_PORT: 26379
@@ -51,17 +58,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP 8.5
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          # Redis 클라이언트는 Composer의 predis/predis를 사용하므로 PHP redis
-          # extension은 필요하지 않다. self-hosted setup-php 설치 지연도 피한다.
-          extensions: mbstring, intl, pdo_mysql, curl, dom, xml, tokenizer
-          # AIPicto와 동일하게 Linux self-runner에서 Xdebug를 사용한다.
-          # pcov 설치 실패로 setup-php가 중단되는 환경에서도 coverage를 확보한다.
-          coverage: xdebug
-          tools: composer:v2
+      # setup-php는 Ubuntu 26.04의 ondrej/php PPA에 의존해 실패·무한 대기할 수
+      # 있다. runner의 네이티브 apt 패키지를 필요한 경우에만 설치하고, 이미 준비된
+      # 영속 runner에서는 설치를 건너뛴다. Redis 클라이언트는 predis/predis다.
+      - name: PHP · 확장 확인 (없을 때만 apt 설치)
+        run: |
+          set -euo pipefail
+          PKGS="php-cli php-intl php-mbstring php-mysql php-xml php-curl php-zip php-xdebug"
+          MISSING=""
+          for p in $PKGS; do
+            if ! dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q '^install ok installed$'; then
+              MISSING="$MISSING $p"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "설치 필요:$MISSING"
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends $MISSING
+          else
+            echo "필요 패키지 모두 설치됨 — apt 건너뜀"
+          fi
+          php -v
+          composer --version
+          php -r 'exit(version_compare(PHP_VERSION, "8.4", ">=") ? 0 : 1);' \
+            || { echo "::error::PHP 8.4 이상이 필요하다 (현재 $(php -r 'echo PHP_VERSION;'))"; exit 1; }
+          php -m | grep -qi '^xdebug$' \
+            || { echo "::error::xdebug 확장이 로드되지 않았다 — 커버리지를 낼 수 없다"; exit 1; }
 
       - name: Composer 캐시 디렉토리 확인
         id: composer-cache
@@ -105,22 +127,43 @@ jobs:
         run: php bin/console migrate
 
       - name: PHPUnit (단위·DB 통합·커버리지)
+        env:
+          XDEBUG_MODE: coverage
         run: |
           mkdir -p build
-          XDEBUG_MODE=coverage vendor/bin/phpunit \
+          vendor/bin/phpunit \
             --coverage-text=build/coverage.txt \
             --coverage-cobertura=build/cobertura.xml
 
       - name: 커버리지 요약
         if: always()
         run: |
+          [ -f build/coverage.txt ] || exit 0
           {
             echo '### 📊 커버리지'
             echo '```'
-            if [ -f build/coverage.txt ]; then
-              cat build/coverage.txt
-            else
-              echo '커버리지 리포트가 생성되지 않았습니다.'
-            fi
+            cat build/coverage.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage summary (markdown)
+        if: github.event_name == 'pull_request'
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: build/cobertura.xml
+          badge: true
+          fail_below_min: false
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: false
+          indicators: true
+          output: file
+          thresholds: '50 75'
+
+      - name: Post coverage PR comment
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          path: code-coverage-results.md
